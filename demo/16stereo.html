@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_sample2.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const STEREO_TRANS = 0.2;
+const STEREO_EYE_SEP = 2 * STEREO_TRANS;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+scene.fog = new THREE.Fog(0x0000ff, 5.0, 20.0);
+
+const stereoCamera = new THREE.StereoCamera();
+stereoCamera.eyeSep = STEREO_EYE_SEP;
+stereoCamera.aspect = (canvas3d.width / 2) / canvas3d.height;
+
+const camera = new THREE.PerspectiveCamera(45.0, stereoCamera.aspect, 0.1, 100.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = true;
+
+const group = new THREE.Group();
+for (let z = -10.0; z <= 10.0; z += 2.0) {
+  for (let x = -10.0; x <= 10.0; x += 2.0) {
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const spr = new THREE.Sprite(material);
+    spr.position.set(x, 0.0, z);
+    spr.scale.set(1.0, 1.0, 1.0);
+    group.add(spr);
+  }
+}
+scene.add(group);
+
+let angle = 0.0;
+const camera_x = 0.0;
+const camera_y = 3.0;
+const camera_z = 6.0;
+
+function renderStereo() {
+  camera.updateMatrixWorld();
+  stereoCamera.update(camera);
+  stereoCamera.cameraL.layers.mask = camera.layers.mask;
+  stereoCamera.cameraR.layers.mask = camera.layers.mask;
+
+  const bufW = renderer.domElement.width;
+  const bufH = renderer.domElement.height;
+  const halfBuf = Math.floor(bufW / 2);
+
+  renderer.setScissorTest(true);
+
+  renderer.setViewport(0, 0, halfBuf, bufH);
+  renderer.setScissor(0, 0, halfBuf, bufH);
+  renderer.render(scene, stereoCamera.cameraL);
+
+  renderer.setViewport(halfBuf, 0, halfBuf, bufH);
+  renderer.setScissor(halfBuf, 0, halfBuf, bufH);
+  renderer.render(scene, stereoCamera.cameraR);
+
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, bufW, bufH);
+}
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  angle += 0.01;
+  const rotX = camera_x * Math.cos(angle) - camera_z * Math.sin(angle);
+  const rotZ = camera_z * Math.cos(angle) + camera_x * Math.sin(angle);
+  camera.position.set(rotX, camera_y, rotZ);
+  camera.lookAt(0.0, 0.0, 0.0);
+  camera.updateMatrixWorld();
+  for (const spr of group.children) {
+    spr.rotation.copy(camera.rotation);
+  }
+  renderStereo();
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="1024" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0); pointer-events:none" width="1024" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

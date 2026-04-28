@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_sample1.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 0.0, 0.0);
+camera.lookAt(0.0, 0.0, -1.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const geom = new THREE.BufferGeometry();
+const positions = new Float32Array([
+  -1.0, -1.0, 0.0, // 左下
+   1.0, -1.0, 0.0, // 右下
+  -1.0,  1.0, 0.0, // 左上
+   1.0,  1.0, 0.0, // 右上
+]);
+geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+const textureCoordinates = new Float32Array([
+  0.0, 1.0, // 左下
+  1.0, 1.0, // 右下
+  0.0, 0.0, // 左上
+  1.0, 0.0, // 右上
+]);
+geom.setAttribute("uv", new THREE.BufferAttribute(textureCoordinates, 2));
+geom.setIndex([0, 1, 2, 1, 3, 2]);
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+texture.wrapS = THREE.ClampToEdgeWrapping;
+texture.wrapT = THREE.ClampToEdgeWrapping;
+texture.minFilter = THREE.LinearFilter;
+texture.magFilter = THREE.LinearFilter;
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = false;
+const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+
+const model = new THREE.Mesh(geom, material);
+model.position.set(0.0, 0.0, -6.0);
+model.rotation.set(
+  THREE.MathUtils.degToRad(45.0), // X軸回転
+  THREE.MathUtils.degToRad(30.0), // Y軸回転
+  THREE.MathUtils.degToRad(15.0), // Z軸回転
+  "ZYX"
+);
+scene.add(model);
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("Hello World !!", 0, 24);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

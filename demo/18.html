@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 0.0, 0.0);
+camera.lookAt(0.0, 0.0, -1.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const geom = new THREE.BufferGeometry();
+const positions = new Float32Array([
+  // Z座標-1.0の四角形
+  -1.0, -1.0, -1.0,
+   1.0, -1.0, -1.0,
+   1.0,  1.0, -1.0,
+  -1.0,  1.0, -1.0,
+  // Z座標1.0の四角形
+  -1.0, -1.0,  1.0,
+   1.0, -1.0,  1.0,
+   1.0,  1.0,  1.0,
+  -1.0,  1.0,  1.0,
+]);
+geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+geom.setIndex([
+  0, 1, 1, 2, 2, 3, 3, 0, // Z座標-1.0の四角形
+  4, 5, 5, 6, 6, 7, 7, 4, // Z座標1.0の四角形
+  0, 4, 1, 5, 2, 6, 3, 7, // 繋ぎ
+]);
+
+const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+const lines = new THREE.LineSegments(geom, material);
+lines.position.set(0.0, 0.0, -6.0);
+lines.rotation.set(
+  THREE.MathUtils.degToRad(36.0), // X軸回転
+  THREE.MathUtils.degToRad(24.0), // Y軸回転
+  THREE.MathUtils.degToRad(12.0), // Z軸回転
+  "ZYX"
+);
+scene.add(lines);
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

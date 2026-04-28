@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_sample2.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/postprocessing/ShaderPass.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js",
+    "three/addons/postprocessing/OutputPass.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/OutputPass.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+let focusDepth = 0.2; // 焦点距離
+let focusRange = 0.8; // ピントが合っているとみなす範囲
+let maxBlur = 0.005; // 最大ぼかし量
+const fogFar = 20.0;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const rtW = Math.max(1, Math.floor(canvas3d.width / renderer.getPixelRatio()));
+const rtH = Math.max(1, Math.floor(canvas3d.height / renderer.getPixelRatio()));
+
+const renderTarget = new THREE.WebGLRenderTarget(rtW, rtH, {
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  format: THREE.RGBAFormat,
+  depthBuffer: true,
+});
+renderTarget.depthTexture = new THREE.DepthTexture(rtW, rtH);
+
+// DOF結果（線形） → OutputPassでsRGBに変換してキャンバスへ
+const postDofTarget = new THREE.WebGLRenderTarget(rtW, rtH, {
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  format: THREE.RGBAFormat,
+});
+
+// 被写界深度（Depth of Field）シェーダー
+const DOFShader = {
+  uniforms: {
+    uColorSampler: { value: null },
+    uDepthSampler: { value: null },
+
+    cameraNear: { value: camera.near },
+    cameraFar: { value: camera.far },
+    fogFar: { value: fogFar },
+    focusDepth: { value: focusDepth },
+    focusRange: { value: focusRange },
+    maxBlur: { value: maxBlur },
+  },
+  vertexShader: `
+    varying vec2 vTextureCoord;
+
+    void main() {
+      vTextureCoord = uv;
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision mediump float;
+
+    uniform sampler2D uColorSampler;
+    uniform sampler2D uDepthSampler;
+
+    uniform float cameraNear;
+    uniform float cameraFar;
+    uniform float fogFar;
+    uniform float focusDepth; // 焦点距離
+    uniform float focusRange; // ピントが合っているとみなす範囲
+    uniform float maxBlur; // 最大ぼかし量
+
+    varying vec2 vTextureCoord;
+
+    void main() {
+      float fragCoordZ = texture2D(uDepthSampler, vTextureCoord).r;
+      float viewZ = (cameraNear * cameraFar) / ((cameraFar - cameraNear) * fragCoordZ - cameraFar); // 透視投影の深度を視点深度に変換
+      float depthNorm = clamp(abs(viewZ) / fogFar, 0.0, 1.0);
+
+      float blur = abs(depthNorm - focusDepth) / focusRange;
+      float amount = clamp(blur, 0.0, 1.0) * maxBlur;
+
+      vec4 color = vec4(0.0);
+      float total = 0.0;
+      for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+          vec2 offset = vec2(float(dx), float(dy)) * amount;
+          color += texture2D(uColorSampler, vTextureCoord + offset);
+          total += 1.0;
+        }
+      }
+      gl_FragColor = vec4(color.rgb / total, 1.0);
+    }
+  `,
+};
+
+const dofPass = new ShaderPass(DOFShader, "uColorSampler");
+dofPass.renderToScreen = false; // DOFをキャンバスへでなくRTT経由でpostDofTargetへ描画
+
+const outputPass = new OutputPass();
+outputPass.renderToScreen = true; // OutputPassはキャンバスへ描画
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = true;
+
+const group = new THREE.Group();
+for (let z = -10.0; z <= 10.0; z += 2.0) {
+  for (let x = -10.0; x <= 10.0; x += 2.0) {
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.position.set(x, 0.0, z);
+    sprite.scale.set(1.0, 1.0, 1.0);
+    group.add(sprite);
+  }
+}
+scene.add(group);
+
+let angle = 0.0;
+const camera_x = 0.0;
+const camera_y = 3.0;
+const camera_z = 6.0;
+
+const keys = new Set();
+window.addEventListener("keydown", (e) => keys.add(e.code));
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  if (keys.has("ArrowUp")) focusDepth += 0.01;
+  if (keys.has("ArrowDown")) focusDepth -= 0.01;
+  if (keys.has("ArrowLeft")) focusRange -= 0.01;
+  if (keys.has("ArrowRight")) focusRange += 0.01;
+  if (keys.has("KeyZ")) maxBlur -= 0.001;
+  if (keys.has("KeyX")) maxBlur += 0.001;
+
+  focusDepth = THREE.MathUtils.clamp(focusDepth, 0.0, 1.0);
+  focusRange = THREE.MathUtils.clamp(focusRange, 0.001, 1.0);
+  maxBlur = Math.max(0.0, maxBlur);
+
+  angle += 0.012;
+  const rotX = camera_x * Math.cos(angle) - camera_z * Math.sin(angle);
+  const rotZ = camera_z * Math.cos(angle) + camera_x * Math.sin(angle);
+  camera.position.set(rotX, camera_y, rotZ);
+  camera.lookAt(0.0, 0.0, 0.0);
+
+  camera.updateMatrixWorld();
+  for (const spr of group.children) {
+    spr.rotation.copy(camera.rotation);
+  }
+
+  dofPass.uniforms.cameraNear.value = camera.near;
+  dofPass.uniforms.cameraFar.value = camera.far;
+  dofPass.uniforms.focusDepth.value = focusDepth;
+  dofPass.uniforms.focusRange.value = focusRange;
+  dofPass.uniforms.maxBlur.value = maxBlur;
+
+  renderer.setRenderTarget(renderTarget);
+  renderer.render(scene, camera);
+
+  dofPass.uniforms.uDepthSampler.value = renderTarget.depthTexture;
+  dofPass.render(renderer, postDofTarget, renderTarget);
+
+  outputPass.render(renderer, null, postDofTarget);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("focusDepth " + focusDepth.toFixed(2), 0, 24);
+  context.fillText("focusRange " + focusRange.toFixed(2), 0, 48);
+  context.fillText("maxBlur " + maxBlur.toFixed(4), 0, 72);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { _DIV, _MOD, GROUND_SIZE, Jiki, JikiJet, JikiShots, WAIT_1 } from "./gameCommon.js";
+import { setAnimationLoop } from "./common.js";
+
+const MODEL_DIR = "./model/";
+
+const FRAME_INTERVAL_MS = 1000 / WAIT_1;
+
+const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 12.0; // d2js版と見た目が同じになるように係数をかける
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 1000.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.position.set(-0.85, 0.8, -0.75);
+scene.add(amb, dir);
+
+const keys = {};
+window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+const jiki = new Jiki(1.0);
+let jikiModel = null;
+let groundTemplate = null;
+const groundModels = [];
+const jetList = [];
+let texJet = null;
+let elapse = 0;
+let shotTemplate = null;
+let jikiShots = null;
+const shotModels = [];
+
+function setGroundTiles() {
+  if (!groundTemplate) return; // init の load 完了前はアニメループが先に回る（キャッシュ空時に顕在化）
+  const gx = Math.floor(jiki.x() / GROUND_SIZE) * GROUND_SIZE;
+  const gz = Math.floor(jiki.z() / GROUND_SIZE) * GROUND_SIZE;
+  let i = 0;
+  for (let zz = -1; zz <= 1; zz++) {
+    for (let xx = -1; xx <= 1; xx++) {
+      if (!groundModels[i]) {
+        const m = groundTemplate.clone(true);
+        scene.add(m);
+        groundModels[i] = m;
+      }
+      groundModels[i].position.set(gx + GROUND_SIZE * xx, 0.0, gz + GROUND_SIZE * zz);
+      i++;
+    }
+  }
+}
+
+function addJetParticle(jet) {
+  const material = new THREE.SpriteMaterial({
+    map: texJet,
+    transparent: true,
+    depthWrite: false,
+  });
+  material.map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.setScalar(1.0);
+  scene.add(sprite);
+  jetList.push({ jet, sprite });
+}
+
+async function init() {
+  try {
+    const tl = new THREE.TextureLoader();
+    const url = typeof textureSrc !== "undefined" && textureSrc[0] ? textureSrc[0] : "";
+    if (!url) throw new Error("texture.js が読み込めません");
+    texJet = await tl.loadAsync(url);
+
+    groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
+    convertMaterialsToLambert(groundTemplate);
+    applySmoothShading(groundTemplate);
+    groundTemplate.scale.setScalar(6.0);
+
+    jikiModel = await loadObjMtl(MODEL_DIR, "jiki");
+    convertMaterialsToLambert(jikiModel);
+    applySmoothShading(jikiModel);
+    jikiModel.scale.setScalar(0.01);
+    scene.add(jikiModel);
+
+    shotTemplate = await loadObjMtl(MODEL_DIR, "jiki_shot");
+    applyDiffuse(shotTemplate, 1.0, 1.0, 0.0);
+    applyAmbient(shotTemplate, 2.0);
+    convertMaterialsToLambert(shotTemplate);
+    applySmoothShading(shotTemplate);
+    shotTemplate.scale.setScalar(0.01);
+    {
+      // ワールド単位のおおよその半径（バウンディングボックス最大辺の半分）
+      const box = new THREE.Box3().setFromObject(shotTemplate);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const sr = Math.max(size.x, size.y, size.z) * 0.5 * 1.5;
+      jikiShots = new JikiShots(sr);
+    }
+
+    setGroundTiles();
+  } catch (e) {
+    console.error(e);
+  }
+}
+init();
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  elapse++;
+
+  jiki.update(
+    !!keys.ArrowUp,
+    !!keys.ArrowDown,
+    !!keys.ArrowLeft,
+    !!keys.ArrowRight
+  );
+  setGroundTiles();
+  if (jikiModel) jiki.pose(jikiModel);
+
+  if (texJet && _MOD(elapse, _DIV(WAIT_1, 15)) === 0) {
+    const vx = -jiki.vx() / WAIT_1;
+    const vy = -jiki.vy() / WAIT_1;
+    const vz = -jiki.vz() / WAIT_1;
+    const bx = jiki.x() - jiki.vx() * 1.5;
+    const by = jiki.y() - jiki.vy() * 1.5;
+    const bz = jiki.z() - jiki.vz() * 1.5;
+    const { right } = jiki.jetOffsetWorld();
+    addJetParticle(new JikiJet(bx + right.x, by + right.y, bz + right.z, vx, vy, vz));
+    addJetParticle(new JikiJet(bx - right.x, by - right.y, bz - right.z, vx, vy, vz));
+  }
+
+  for (let i = jetList.length - 1; i >= 0; i--) {
+    const { jet, sprite } = jetList[i];
+    if (!jet.update()) {
+      scene.remove(sprite);
+      sprite.material.map?.dispose?.();
+      sprite.material.dispose();
+      jetList.splice(i, 1);
+      continue;
+    }
+    sprite.position.set(jet.x(), jet.y(), jet.z());
+    sprite.material.opacity = jet.trans();
+  }
+
+  if (jikiShots) {
+    if (keys.Space) {
+      jikiShots.add(elapse, jiki.x(), jiki.y(), jiki.z(), jiki.vx(), jiki.vy(), jiki.vz(), jiki.rz());
+    }
+    jikiShots.update(false);
+    if (jikiShots && shotTemplate) {
+      while (shotModels.length < jikiShots.size()) {
+        const tmp = shotTemplate.clone(true);
+        scene.add(tmp);
+        shotModels.push(tmp);
+      }
+      while (shotModels.length > jikiShots.size()) {
+        const tmp = shotModels.pop();
+        scene.remove(tmp);
+      }
+      for (let i = 0; i < jikiShots.size(); i++) {
+        const model = shotModels[i];
+        const shot = jikiShots.get(i);
+        model.position.set(shot.x(), shot.y(), shot.z());
+        const tmp = new THREE.Vector3(shot.x() + shot.vx(), shot.y() + shot.vy(), shot.z() + shot.vz());
+        model.lookAt(tmp);
+        // d2jsはglu.rotate(-shot.rz, 0,0,1)。進行方向はlookAt逆行列＋multiplyのためローカルZの向きが
+        // Object3D.lookAt(速度方向)後のローカルZと鏡映になり、同じ「-rz」でもロールが反対に見える。
+        // 自機poseのrz（gameCommon poseは「+rz」）と弾の傾きを揃えるにはここは「+rz」。
+        model.rotateZ(THREE.MathUtils.degToRad(shot.rz()));
+      }
+    }
+  }
+
+  const camera_vx = -jiki.vx() * 10.0;
+  const camera_vy = -jiki.vy() * 10.0;
+  const camera_vz = -jiki.vz() * 10.0;
+  const look_x = jiki.x();
+  const look_y = jiki.y() + 1.0; // 自機の少し上
+  const look_z = jiki.z();
+  const camera_x = look_x + camera_vx;
+  const camera_y = look_y + camera_vy + 1.0; // 少し上から見下ろす
+  const camera_z = look_z + camera_vz;
+  camera.position.set(camera_x, camera_y, camera_z);
+  camera.lookAt(look_x, look_y, look_z);
+
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.strokeStyle = "rgb(0, 0, 0)";
+  context.strokeRect(0, 0, canvas2d.width - 1, canvas2d.height - 1);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

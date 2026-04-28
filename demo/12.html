@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_witch.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { applyDiffuse, applyDiffuseDataUrlTextures, applySmoothShading, convertMaterialsToBasic, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { setAnimationLoop } from "./common.js";
+
+const useLight = false;
+
+const MODEL_DIR = "./model/";
+
+const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+
+let image_loaded = false;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 2.5, 5.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+camera.lookAt(0.0, 2.5, 0.0);
+
+if (useLight) {
+  const amb = new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+  dir.position.set(0.85, 0.8, 0.75);
+  scene.add(amb, dir);
+}
+
+let rotateX = 0.0;
+let rotateY = 0.0;
+let meshRoot = null;
+
+async function init() {
+  try {
+    const pivot = new THREE.Group();
+    pivot.position.set(0.0, 2.5, 0.0);
+    const root = await loadObjMtl(MODEL_DIR, "witch");
+    applyDiffuseDataUrlTextures(root, [
+      { materialName: "kao", dataUrl: img_src[0] },
+      { materialName: "body", dataUrl: img_src[1] },
+      { materialName: "fire", dataUrl: img_src[2] },
+    ]);
+    if (useLight) {
+      convertMaterialsToLambert(root);
+      applyDiffuse(root, 0.8, 0.8, 0.8);
+    } else {
+      convertMaterialsToBasic(root);
+      applyDiffuse(root, 1.0, 1.0, 1.0);
+    }
+    applySmoothShading(root);
+    root.scale.setScalar(0.015);
+    root.position.set(0.0, -2.5, 0.0);
+    pivot.add(root);
+    scene.add(pivot);
+    meshRoot = pivot;
+    image_loaded = true;
+  } catch (e) {
+    console.error(e);
+  }
+}
+init();
+
+setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
+  if (meshRoot) {
+    meshRoot.rotation.x = THREE.MathUtils.degToRad(rotateX);
+    meshRoot.rotation.y = THREE.MathUtils.degToRad(rotateY);
+  }
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("rotateX " + rotateX.toFixed(1), 0, 24);
+  context.fillText("rotateY " + rotateY.toFixed(1), 0, 48);
+});
+
+let mouseDown = false;
+let mouseX = 0;
+let mouseY = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  mouseDown = true;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+window.addEventListener("pointerup", () => {
+  mouseDown = false;
+});
+window.addEventListener("pointermove", (e) => {
+  if (!mouseDown) return;
+  rotateX += (e.clientY - mouseY) / 2.0;
+  rotateY += (e.clientX - mouseX) / 2.0;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0); pointer-events:none" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_sample1.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+
+// MeshPhongは「albedo ≒ map * color」。d2jsのuDiffuseはシェーダ内で別扱いのため、Threeでは
+// 「乗算色」を白に近づけるとテクスチャがよりそのまま見える。1.0で強いマゼンタ、0.0で白。
+const DIFFUSE_BLEND = 0.5;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const useGouraud = true;
+const diffuse = new THREE.Color(1.0, 0.0, 1.0);
+const useEmission = false;
+const emissionColor = new THREE.Color(1.0, 0.0, 1.0);
+const emissionIntensity = 0.75;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 0.0, 3.0);
+camera.lookAt(0.0, 0.0, 0.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.physicallyCorrectLights = false;
+
+const geom = new THREE.BoxGeometry(2.0, 2.0, 2.0);
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+// d2jsはgl.texImage2DのRGBAをそのままtexture2Dし、シェーダ内で線形変換せず乗算している。
+// Three.js既定（texture.colorSpace = SRGBColorSpace）だとサンプルが線形にデコードされ、
+// コントラスト・彩度が強くなり赤みが増しやすい。寄せるにはテクスチャをNoColorSpaceにする。
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = true; // THREE.BoxGeometryではtrueにしないと画像が反転する
+texture.generateMipmaps = false;
+texture.minFilter = THREE.LinearFilter;
+texture.magFilter = THREE.LinearFilter;
+const material = new THREE.MeshPhongMaterial({
+  map: texture,
+  color: diffuse.clone().lerp(new THREE.Color(1, 1, 1), 1.0 - DIFFUSE_BLEND),
+  specular: new THREE.Color(0.7, 0.7, 0.7),
+  shininess: 50.0,
+  emissive: emissionColor,
+  emissiveIntensity: useEmission ? emissionIntensity : 0.0,
+  flatShading: useGouraud,
+});
+
+const model = new THREE.Mesh(geom, material);
+model.position.set(0.0, 0.0, -3.0);
+model.rotation.set(
+  THREE.MathUtils.degToRad(45.0), // X軸回転
+  THREE.MathUtils.degToRad(30.0), // Y軸回転
+  THREE.MathUtils.degToRad(15.0), // Z軸回転
+  "ZYX"
+);
+scene.add(model);
+
+const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.position.set(0.85, 0.8, 0.75);
+scene.add(amb, dir);
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("Hello World !!", 0, 24);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

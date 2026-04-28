@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { setAnimationLoop } from "./common.js";
+
+const MODEL_DIR = "./model/";
+
+const WAIT_1 = 60/*フレーム*/;
+const FRAME_INTERVAL_MS = 1000 / WAIT_1;
+
+const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 12.0; // d2js版と見た目が同じになるように係数をかける
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 1000.0);
+const jikiPos = new THREE.Vector3(0.0, 50.0, 0.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.position.set(-0.85, 0.8, -0.75);
+scene.add(amb, dir);
+
+async function init() {
+  try {
+    const groundModel = await loadObjMtl(MODEL_DIR, "ground");
+    convertMaterialsToLambert(groundModel);
+    applySmoothShading(groundModel);
+    groundModel.scale.setScalar(6.0);
+    scene.add(groundModel);
+
+    const jikiModel = await loadObjMtl(MODEL_DIR, "jiki");
+    convertMaterialsToLambert(jikiModel);
+    applySmoothShading(jikiModel);
+    jikiModel.scale.setScalar(0.01);
+    jikiModel.position.copy(jikiPos);
+    jikiModel.rotation.y = Math.PI;
+    scene.add(jikiModel);
+  } catch (e) {
+    console.error(e);
+  }
+}
+init();
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  const camera_vx = 0.0;
+  const camera_vy = 0.0;
+  const camera_vz = 10.0;
+  const look_x = jikiPos.x;
+  const look_y = jikiPos.y + 1.0; // 自機の少し上
+  const look_z = jikiPos.z;
+  const camera_x = look_x + camera_vx;
+  const camera_y = look_y + camera_vy + 1.0; // 少し上から見下ろす
+  const camera_z = look_z + camera_vz;
+  camera.position.set(camera_x, camera_y, camera_z);
+  camera.lookAt(look_x, look_y, look_z);
+
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.strokeStyle = "rgb(0, 0, 0)";
+  context.strokeRect(0, 0, canvas2d.width - 1, canvas2d.height - 1);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

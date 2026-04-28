@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture_sample2.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { setAnimationLoop } from "./common.js";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 6.0, 6.0);
+camera.lookAt(0.0, 0.0, 0.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const loader = new THREE.TextureLoader();
+const texture = loader.load(img_src);
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.flipY = true;
+
+const pos = [
+  [ 0.0, 0.5,  2.0],
+  [-1.5, 0.5,  0.0],
+  [ 1.5, 0.5,  0.0],
+  [-3.0, 0.5, -2.0],
+  [ 0.0, 0.5, -2.0],
+  [ 3.0, 0.5, -2.0],
+];
+const group = new THREE.Group();
+pos.forEach(([x, y, z]) => {
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true });
+  const sprite = new THREE.Sprite(material);
+  sprite.position.set(x, y, z);
+  sprite.scale.set(2.0, 2.0, 1.0);
+  group.add(sprite);
+});
+scene.add(group);
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  group.children.forEach((spr) => spr.lookAt(camera.position));
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>
