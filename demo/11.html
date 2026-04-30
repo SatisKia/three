@@ -24,14 +24,21 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0000ff);
 
 const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+//camera.position.set(0.0, 6.0, 6.0);
+//camera.lookAt(0.0, 0.0, 0.0);
 
-const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({
+  canvas: canvas3d,
+  antialias: true,
+  alpha: true,
+  preserveDrawingBuffer: true, // 描画後もバッファ保持（toDataURLを行う場合はtrue）
+});
 renderer.setSize(canvas3d.width, canvas3d.height);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+const texture = loader.load(img_src);
 texture.colorSpace = THREE.SRGBColorSpace;
 texture.flipY = true;
 
@@ -46,7 +53,7 @@ const pos = [
 const worldPts = pos.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
 const group = new THREE.Group();
 pos.forEach(([x, y, z]) => {
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true/*既定値。省略可*/ });
   const sprite = new THREE.Sprite(material);
   sprite.position.set(x, y, z);
   sprite.scale.set(2.0, 2.0, 1.0);
@@ -54,12 +61,14 @@ pos.forEach(([x, y, z]) => {
 });
 scene.add(group);
 
+// カメラの回転
 let angle = 0.0;
 const camera_x = 0.0;
 const camera_y = 6.0;
 const camera_z = 6.0;
-let hide2DFlag = false;
+
 let screenshotFlag = false;
+let hide2DFlag = false;
 
 const keys = new Set();
 window.addEventListener("keydown", (e) => {
@@ -86,32 +95,43 @@ setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   // 2Dグラフィック画面の描画
   const context = canvas2d.getContext("2d");
   context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(0, 255, 255)";
+  worldPts.forEach((wp, i) => {
+    const pProj = wp.clone().project(camera);
+    const sx = (pProj.x * 0.5 + 0.5) * canvas2d.width;
+    const sy = (-pProj.y * 0.5 + 0.5) * canvas2d.height;
+    const dist = camera.position.distanceTo(wp);
+    const ndc = wp.clone().project(camera); // NDC（Normalized Device Coordinates、正規化デバイス座標）に戻す
+    const wld = new THREE.Vector3(ndc.x, ndc.y, ndc.z);
+    wld.unproject(camera);
+    context.fillText(String(Math.round(dist * 100.0) / 100.0), sx, sy);
+    context.fillText(
+      [wld.x, wld.y, wld.z].map((n) => Math.round(n * 100.0) / 100.0).join(" "),
+      sx,
+      sy + 30.0
+    );
+  });
+
   context.font = "24px 'MS Gothic', sans-serif";
   context.fillStyle = "rgb(255, 0, 255)";
   context.fillText("Screenshot : [S]", 0, 456);
   context.fillText("Screenshot (Hide 2D) : [Shift]+[S]", 0, 480);
-  if (!hide2DFlag) {
-    context.fillStyle = "rgb(0, 255, 255)";
-    worldPts.forEach((wp, i) => {
-      const pProj = wp.clone().project(camera);
-      const sx = (pProj.x * 0.5 + 0.5) * canvas2d.width;
-      const sy = (-pProj.y * 0.5 + 0.5) * canvas2d.height;
-      const dist = camera.position.distanceTo(wp);
-      const ndc = wp.clone().project(camera); // NDCに戻す
-      const wld = new THREE.Vector3(ndc.x, ndc.y, ndc.z);
-      wld.unproject(camera);
-      context.fillText(String(Math.round(dist * 100.0) / 100.0), sx, sy);
-      context.fillText(
-        [wld.x, wld.y, wld.z].map((n) => Math.round(n * 100.0) / 100.0).join(" "),
-        sx,
-        sy + 30.0
-      );
-    });
-  }
 
   if (screenshotFlag) {
     screenshotFlag = false;
-    const dataUrl = renderer.domElement.toDataURL("image/png");
+    const w = canvas3d.width;
+    const h = canvas3d.height;
+    const composite = document.createElement("canvas");
+    composite.width = w;
+    composite.height = h;
+    const cctx = composite.getContext("2d");
+    cctx.drawImage(renderer.domElement, 0, 0);
+    if (!hide2DFlag) {
+      cctx.drawImage(canvas2d, 0, 0, canvas2d.width, canvas2d.height, 0, 0, w, h);
+    }
+    const dataUrl = composite.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = "screenshot.png";

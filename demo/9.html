@@ -53,7 +53,6 @@ scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
 camera.position.set(0.0, 0.0, 13.0);
 camera.lookAt(0.0, 0.0, 0.0);
-scene.add(camera);
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
@@ -95,6 +94,7 @@ const pointLightReach = 30.0; // 光の最大到達距離。d2js版ではuPointL
 const pointLightAttenuation = 0.5; // 減衰係数。d2js版ではuPointLightAttenuation0～2
 const pointLight = new THREE.PointLight(0xffffff, pointLightIntensity, pointLightReach, pointLightAttenuation);
 camera.add(pointLight); // 点光源をカメラの子にする
+scene.add(camera); // カメラをsceneに載せないと、カメラの子になっているPointLightはシーングラフに含まれず、ライトとして扱われない
 
 const keys = new Set();
 window.addEventListener("keydown", (e) => keys.add(e.code));

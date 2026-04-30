@@ -30,6 +30,8 @@ camera.lookAt(0.0, 0.0, -1.0);
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
 renderer.setPixelRatio(window.devicePixelRatio);
+//renderer.toneMapping = THREE.NoToneMapping;
+//renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
 const geom = new THREE.BufferGeometry();
 const positions = new Float32Array([

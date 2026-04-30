@@ -47,7 +47,7 @@ const pos = [
 ];
 const group = new THREE.Group();
 pos.forEach(([x, y, z]) => {
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true });
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true/*既定値。省略可*/ });
   const sprite = new THREE.Sprite(material);
   sprite.position.set(x, y, z);
   sprite.scale.set(2.0, 2.0, 1.0);

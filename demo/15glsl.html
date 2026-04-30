@@ -30,6 +30,8 @@ const GROUND_PLANE_SIZE = 200 * 0.033;
 const REFLECTOR_COLOR = 0xffffff;
 const WATER_COLOR = 0x808080;
 
+let dispMesh = false;
+let meshObjRoot = null;
 // 0=sin/cosの単純オフセット 1=重ね波（sinのみ） 2=重ね波＋ノイズ
 let waveType = 0;
 
@@ -55,6 +57,7 @@ const WaterRippleReflectorShader = {
   },
   vertexShader: /*glsl*/`
     uniform mat4 textureMatrix;
+
     varying vec4 vUv;
 
     #include <common>
@@ -102,7 +105,7 @@ const WaterRippleReflectorShader = {
       float value = 0.0;
       float amplitude = 1.0;
       float frequency = 1.0;
-      for ( int i = 0; i < 4; i++ ) {
+      for (int i = 0; i < 4; i++) {
         value += amplitude * smoothNoise(st * frequency * scale);
         amplitude *= 0.5;
         frequency *= 2.0;
@@ -111,7 +114,7 @@ const WaterRippleReflectorShader = {
     }
 
     float waveOffset(float x, float y, float freq, float amp, float speed, float time, float dx, float dy) {
-      if ( uWaveType == 1 ) {
+      if (uWaveType == 1) {
         return sin(x * dx * freq + y * dy * freq + time * speed) * amp;
       }
       vec2 noiseCoord = vec2(x * dx * uNoiseScale, y * dy * uNoiseScale + time * uNoiseTimeScale);
@@ -120,15 +123,15 @@ const WaterRippleReflectorShader = {
       return w * amp * (1.0 + noiseValue * uNoiseAmplitude);
     }
 
-    float blendOverlay( float base, float blend ) {
-      return ( base < 0.5 ? ( 2.0 * base * blend ) : ( 1.0 - 2.0 * ( 1.0 - base ) * ( 1.0 - blend ) ) );
+    float blendOverlay(float base, float blend) {
+      return (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend)));
     }
 
-    vec3 blendOverlay( vec3 base, vec3 blend ) {
+    vec3 blendOverlay(vec3 base, vec3 blend) {
       return vec3(
-        blendOverlay( base.r, blend.r ),
-        blendOverlay( base.g, blend.g ),
-        blendOverlay( base.b, blend.b )
+        blendOverlay(base.r, blend.r),
+        blendOverlay(base.g, blend.g),
+        blendOverlay(base.b, blend.b)
       );
     }
 
@@ -136,8 +139,8 @@ const WaterRippleReflectorShader = {
       #include <logdepthbuf_fragment>
 
       float offsetX = 0.0;
-      if ( uFrequencyX != 0.0 ) {
-        if ( uWaveType == 0 ) {
+      if (uFrequencyX != 0.0) {
+        if (uWaveType == 0) {
           offsetX = sin(gl_FragCoord.x * uFrequencyX + uElapse * uSpeedX) * uAmplitudeX;
         } else {
           offsetX += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX, uAmplitudeX, uSpeedX, uElapse, 1.0, 0.0);
@@ -146,8 +149,8 @@ const WaterRippleReflectorShader = {
         }
       }
       float offsetY = 0.0;
-      if ( uFrequencyY != 0.0 ) {
-        if ( uWaveType == 0 ) {
+      if (uFrequencyY != 0.0) {
+        if (uWaveType == 0) {
           offsetY = cos(gl_FragCoord.y * uFrequencyY + uElapse * uSpeedY) * uAmplitudeY;
         } else {
           offsetY += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY, uAmplitudeY, uSpeedY, uElapse, 0.0, 1.0);
@@ -162,8 +165,8 @@ const WaterRippleReflectorShader = {
       uv.y += offsetY;
       vec4 distortedUv = vec4(uv * w, vUv.z, w);
 
-      vec4 base = texture2DProj( tDiffuse, distortedUv );
-      gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );
+      vec4 base = texture2DProj(tDiffuse, distortedUv);
+      gl_FragColor = vec4(blendOverlay(base.rgb, color), 1.0);
 
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -290,7 +293,9 @@ async function init() {
         }
       });
       scenePivot.add(root);
+      if (s.name === "mesh") meshObjRoot = root;
     }
+    if (meshObjRoot) meshObjRoot.visible = dispMesh;
     image_loaded = true;
   } catch (e) {
     console.error(e);

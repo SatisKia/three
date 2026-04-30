@@ -58,6 +58,8 @@ const WAVE_COMBINED_NOISE_AMP = 0.5;
 const WAVE_COMBINED_NOISE_U = 0.06;
 const WAVE_COMBINED_NOISE_TIME = 0.1;
 
+let dispMesh = false;
+let meshObjRoot = null;
 let waveType = 0;
 
 function myRandom(ix, iy) {
@@ -249,7 +251,9 @@ async function init() {
         }
       });
       scenePivot.add(root);
+      if (s.name === "mesh") meshObjRoot = root;
     }
+    if (meshObjRoot) meshObjRoot.visible = dispMesh;
     image_loaded = true;
   } catch (e) {
     console.error(e);

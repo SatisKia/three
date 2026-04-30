@@ -83,9 +83,7 @@ scene.add(model);
 const amb = new THREE.AmbientLight(0xffffff, 1.0 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
 dir.target.position.set(0.0, 0.0, 0.0);
-scene.add(dir);
-scene.add(dir.target);
-scene.add(amb);
+scene.add(amb, dir, dir.target);
 
 function applyMaterial() {
   const data = MATERIAL_DATA[materialIndex];

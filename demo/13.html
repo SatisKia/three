@@ -18,12 +18,13 @@ import * as THREE from "three";
 import { applyDiffuse, applyDiffuseDataUrlTextures, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
+const useWireframe = false;
+const WIREFRAME_GRAY = 0.5;
+
 const MODEL_DIR = "./model/";
 
 const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
 const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
-
-const useWireframe = false;
 
 let image_loaded = false;
 
@@ -43,7 +44,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 既定値：PCFShadowMap
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -79,8 +80,6 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js�
 const keys = new Set();
 window.addEventListener("keydown", (e) => keys.add(e.code));
 window.addEventListener("keyup", (e) => keys.delete(e.code));
-
-const WIREFRAME_GRAY = 0.5;
 
 async function init() {
   const specs = [
@@ -159,6 +158,7 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
   dir.position.copy(transLight);
   dir.target.position.set(0.0, lookY, 0.0);
   dir.target.updateMatrixWorld();
+
   camera.lookAt(0.0, lookY, 0.0);
   renderer.render(scene, camera);
 

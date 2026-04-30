@@ -28,6 +28,7 @@ const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるよ�
 const GROUND_MODEL_SCALE = 0.033;
 const GROUND_PLANE_SIZE = 200 * GROUND_MODEL_SCALE;
 const GROUND_COLOR = 0xffffff;
+const REFLECTOR_COLOR = 0x808080;
 
 let image_loaded = false;
 
@@ -68,13 +69,12 @@ window.addEventListener("keydown", (e) => keys.add(e.code));
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 
 const reflector = new Reflector(new THREE.PlaneGeometry(GROUND_PLANE_SIZE, GROUND_PLANE_SIZE), {
-  color: 0x8899aa,
+  color: REFLECTOR_COLOR,
   textureWidth: canvas3d.width,
   textureHeight: canvas3d.height,
 });
 reflector.rotation.x = -Math.PI / 2;
 reflector.position.y = 0.01;
-
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(GROUND_PLANE_SIZE, GROUND_PLANE_SIZE),
   new THREE.MeshStandardMaterial({ color: GROUND_COLOR, roughness: 1.0, transparent: true, opacity: 0.35 })
@@ -86,8 +86,6 @@ scenePivot.add(reflector);
 scenePivot.add(ground);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -97,6 +95,8 @@ dir.shadow.camera.left = -shadowExtent;
 dir.shadow.camera.right = shadowExtent;
 dir.shadow.camera.top = shadowExtent;
 dir.shadow.camera.bottom = -shadowExtent;
+dir.position.set(lightX, lightY, lightZ);
+dir.target.position.set(0.0, lookY, 0.0);
 scene.add(dir);
 scene.add(dir.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
