@@ -173,8 +173,6 @@ scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -184,6 +182,8 @@ dir.shadow.camera.left = -shadowExtent;
 dir.shadow.camera.right = shadowExtent;
 dir.shadow.camera.top = shadowExtent;
 dir.shadow.camera.bottom = -shadowExtent;
+dir.position.set(lightX, lightY, lightZ);
+dir.target.position.set(0.0, lookY, 0.0);
 scene.add(dir);
 scene.add(dir.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける

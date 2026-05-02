@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
 <meta charset="utf-8" />
 <title></title>
@@ -56,120 +56,125 @@ const WaterRippleReflectorShader = {
     uNoiseAmplitude: { value: 0.5 },
   },
   vertexShader: /*glsl*/`
-    uniform mat4 textureMatrix;
+    uniform mat4 textureMatrix; // Reflectorが渡す、反射サンプル用の投影行列（4x4）
 
-    varying vec4 vUv;
+    varying vec4 vTextureCoord; // フラグメントへ渡す同次投射UV（.xy/.z/.wを使用）
 
-    #include <common>
-    #include <logdepthbuf_pars_vertex>
+    #include <common> // Three共通チャンク（数学・定義など）
+    #include <logdepthbuf_pars_vertex> // 対数デプスバッファ用の頂点側宣言チャンク
 
-    void main() {
-      vUv = textureMatrix * vec4( position, 1.0 );
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-      #include <logdepthbuf_vertex>
+    void main() { // 各頂点で1回：投射UVとクリップ座標を求める
+      vTextureCoord = textureMatrix * vec4(position, 1.0); // モデルローカル座標から反射テクスチャ空間への同次座標
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); // クリップ空間での頂点位置
+      #include <logdepthbuf_vertex> // 対数デプス用にgl_Positionを補正
     }
+
   `,
   fragmentShader: /*glsl*/`
-    uniform vec3 color;
-    uniform sampler2D tDiffuse;
-    uniform int uWaveType;
-    uniform float uFrequencyX, uFrequencyY;
-    uniform float uAmplitudeX, uAmplitudeY;
-    uniform float uSpeedX, uSpeedY;
-    uniform float uElapse;
-    uniform float uNoiseScale;
-    uniform float uNoiseTimeScale;
-    uniform float uNoiseStrength;
-    uniform float uNoiseAmplitude;
+    uniform vec3 color; // オーバーレイ合成用ティントRGB（blendOverlayのブレンド相手）
+    uniform sampler2D tDiffuse; // Reflectorがセットするオフスクリーンの反射カラーバッファ
 
-    varying vec4 vUv;
+    uniform int uWaveType; // 0=単純sin/cos 1=重ねsinのみ 2=重ねsin＋ノイズ（フラグメント内分岐）
+    uniform float uFrequencyX, uFrequencyY; // 波の画面空間における頻度（X/Y別）
+    uniform float uAmplitudeX, uAmplitudeY; // UVオフセットの振幅（ゆらぎの強さ）
+    uniform float uSpeedX, uSpeedY; // 時間uElapseに対する進行スピード
+    uniform float uElapse; // 経過タイム（フレームカウント等を蓄積した値）
+    uniform float uNoiseScale; // ノイズ座標の空間スケール
+    uniform float uNoiseTimeScale; // ノイズに時間を載せる量
+    uniform float uNoiseStrength; //ノイズを位相へ効かせる強さの係数
+    uniform float uNoiseAmplitude; // 振幅へノイズを掛ける際の係数
 
-    #include <logdepthbuf_pars_fragment>
+    varying vec4 vTextureCoord; // 頂点から補間された投射用同次座標
 
-    float rand(vec2 st) {
-      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+    #include <logdepthbuf_pars_fragment> // 対数デプス用フラグメント側事前宣言チャンク
+
+    float random(vec2 st) { // [0,1)のハッシュ値：擬似乱数1サンプル
+      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123); // 正弦＋フラクタルの定番式
     }
 
-    float smoothNoise(vec2 st) {
-      vec2 i = floor(st);
-      vec2 f = fract(st);
-      float a = rand(i);
-      float b = rand(i + vec2(1.0, 0.0));
-      float c = rand(i + vec2(0.0, 1.0));
-      float d = rand(i + vec2(1.0, 1.0));
-      vec2 u = f * f * (3.0 - 2.0 * f);
-      return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+    float smoothNoise(vec2 st) { // セル単位バイリニア風な滑らかノイズ
+      vec2 i = floor(st); // 格子の左下インデックス
+      vec2 f = fract(st); // 格子内の小数オフセット[0,1)^2
+      float a = random(i); // 左下コーナーの乱数
+      float b = random(i + vec2(1.0, 0.0)); // 右下
+      float c = random(i + vec2(0.0, 1.0)); // 左上
+      float d = random(i + vec2(1.0, 1.0)); // 右上
+      vec2 u = f * f * (3.0 - 2.0 * f); // smoothstep相当で端を滑らかに
+      return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y; // 双線形ブレンド
     }
 
-    float fbmNoise(vec2 st, float scale) {
-      float value = 0.0;
-      float amplitude = 1.0;
-      float frequency = 1.0;
-      for (int i = 0; i < 4; i++) {
-        value += amplitude * smoothNoise(st * frequency * scale);
-        amplitude *= 0.5;
-        frequency *= 2.0;
+    float noise(vec2 st, float scale) { // FB M風オクターブ：粗さscaleで4段重ね
+      float value = 0.0; // 蓄積ノイズ
+      float amplitude = 1.0; // 現在オクターブの重み
+      float frequency = 1.0; // 現在オクターブの周波数倍率
+      for (int i = 0; i < 4; i++) { // オクターブ4回ループ（WebGLで定数のみ）
+        value += amplitude * smoothNoise(st * frequency * scale); // 細かさを増しながら加算
+        amplitude *= 0.5; // 高周波ほど振幅を弱める
+        frequency *= 2.0; // 次オクターブは2倍細かく
       }
-      return value;
+      return value; // [0付近～]のノイズ和
     }
 
-    float waveOffset(float x, float y, float freq, float amp, float speed, float time, float dx, float dy) {
-      if (uWaveType == 1) {
-        return sin(x * dx * freq + y * dy * freq + time * speed) * amp;
+    float wave(float x, float y, float freq, float amp, float speed, float time, float dx, float dy) {
+      // 画面ピクセル座標由来の(x,y)、方向(dx,dy)で進行する波オフセット1成分
+      if (uWaveType == 1) { // Type1：純sin、ノイズなし（重ね合わせは呼び出し側）
+        float wave = sin(x * dx * freq + y * dy * freq + time * speed); // 位相項
+        return wave * amp; // 振幅調整済み値
+      } else { // Type2など：ノイズで位相と振幅を変調（Type1は上記ifでreturn済み）
+        vec2 noiseCoord = vec2(x * dx * uNoiseScale, y * dy * uNoiseScale + time * uNoiseTimeScale); // ノイズ用UV
+        float noiseValue = noise(noiseCoord, 1.0) * uNoiseStrength; // スケール1のnoiseを強さで調整
+        float wave = sin(x * dx * freq + y * dy * freq + time * speed + noiseValue * 3.14159); // PIで位相ゆらぐsin
+        return wave * amp * (1.0 + noiseValue * uNoiseAmplitude); // 振幅もノイズで変調
       }
-      vec2 noiseCoord = vec2(x * dx * uNoiseScale, y * dy * uNoiseScale + time * uNoiseTimeScale);
-      float noiseValue = fbmNoise(noiseCoord, 1.0) * uNoiseStrength;
-      float w = sin(x * dx * freq + y * dy * freq + time * speed + noiseValue * 3.14159);
-      return w * amp * (1.0 + noiseValue * uNoiseAmplitude);
     }
 
-    float blendOverlay(float base, float blend) {
-      return (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend)));
+    float blendOverlay(float base, float blend) { // スカラー1チャンネル・オーバーレイブレンド
+      return (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend))); // Photoshop風overlay
     }
 
-    vec3 blendOverlay(vec3 base, vec3 blend) {
+    vec3 blendOverlay(vec3 base, vec3 blend) { // RGB各チャンネルにオーバーレイ
       return vec3(
-        blendOverlay(base.r, blend.r),
-        blendOverlay(base.g, blend.g),
-        blendOverlay(base.b, blend.b)
+        blendOverlay(base.r, blend.r), // 赤チャンネル
+        blendOverlay(base.g, blend.g), // 緑チャンネル
+        blendOverlay(base.b, blend.b) // 青チャンネル
       );
     }
 
-    void main() {
-      #include <logdepthbuf_fragment>
+    void main() { // 各フラグメント1回：波でUVゆらして反射をサンプル
+      #include <logdepthbuf_fragment> // 対数デプス用フラグメント本処理チャンク
 
-      float offsetX = 0.0;
-      if (uFrequencyX != 0.0) {
-        if (uWaveType == 0) {
-          offsetX = sin(gl_FragCoord.x * uFrequencyX + uElapse * uSpeedX) * uAmplitudeX;
-        } else {
-          offsetX += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX, uAmplitudeX, uSpeedX, uElapse, 1.0, 0.0);
-          offsetX += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 0.7, uAmplitudeX * 0.5, uSpeedX * 0.8, uElapse, 0.7, 0.7);
-          offsetX += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 1.5, uAmplitudeX * 0.3, uSpeedX * 1.2, uElapse, 0.3, 0.9);
+      float offsetX = 0.0; // テクスチャ空間での横方向ゆらぎ（加算単位）
+      if (uFrequencyX != 0.0) { // X頻度0なら計算省略
+        if (uWaveType == 0) { // Type0：画面Xに沿った単一sinオフセット
+          offsetX = sin(gl_FragCoord.x * uFrequencyX + uElapse * uSpeedX) * uAmplitudeX; // ピクセル座標依存
+        } else { // Type1/2：3本の波を重ね（周波数・振幅・進行係数ずらし）
+          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX, uAmplitudeX, uSpeedX, uElapse, 1.0, 0.0); // メイン進行+X
+          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 0.7, uAmplitudeX * 0.5, uSpeedX * 0.8, uElapse, 0.7, 0.7); // 斜め系
+          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 1.5, uAmplitudeX * 0.3, uSpeedX * 1.2, uElapse, 0.3, 0.9); // 細ripple
         }
       }
-      float offsetY = 0.0;
-      if (uFrequencyY != 0.0) {
-        if (uWaveType == 0) {
+      float offsetY = 0.0; // 縦方向ゆらぎ
+      if (uFrequencyY != 0.0) { // Y頻度0省略
+        if (uWaveType == 0) { // cosでY依存（Xはsinと対）
           offsetY = cos(gl_FragCoord.y * uFrequencyY + uElapse * uSpeedY) * uAmplitudeY;
-        } else {
-          offsetY += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY, uAmplitudeY, uSpeedY, uElapse, 0.0, 1.0);
-          offsetY += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 0.7, uAmplitudeY * 0.5, uSpeedY * 0.8, uElapse, 0.7, 0.7);
-          offsetY += waveOffset(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 1.5, uAmplitudeY * 0.3, uSpeedY * 1.2, uElapse, 0.3, 0.9);
+        } else { // Y方向にも3成分重ね
+          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY, uAmplitudeY, uSpeedY, uElapse, 0.0, 1.0);
+          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 0.7, uAmplitudeY * 0.5, uSpeedY * 0.8, uElapse, 0.7, 0.7);
+          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 1.5, uAmplitudeY * 0.3, uSpeedY * 1.2, uElapse, 0.3, 0.9);
         }
       }
 
-      float w = vUv.w;
-      vec2 uv = vUv.xy / w;
-      uv.x += offsetX;
-      uv.y += offsetY;
-      vec4 distortedUv = vec4(uv * w, vUv.z, w);
+      float w = vTextureCoord.w; // 透視除算用の同次w（標準投射では奥行き関連）
+      vec2 uv = vTextureCoord.xy / w; // 正規化デバイス前の同次から射影済みUV相当の2次元
+      uv.x += offsetX; // XゆらぎをUVに反映
+      uv.y += offsetY; // Yゆらぎ反映
+      vec4 distortedUv = vec4(uv * w, vTextureCoord.z, w); // Proj用にxyを再度wでスケール、zとwは元を踏襲
 
-      vec4 base = texture2DProj(tDiffuse, distortedUv);
-      gl_FragColor = vec4(blendOverlay(base.rgb, color), 1.0);
+      vec4 base = texture2DProj(tDiffuse, distortedUv); // 歪んだ同次座標で反射テクスチャを投射サンプル
+      gl_FragColor = vec4(blendOverlay(base.rgb, color), 1.0); // RGBはオーバーレイ、Aは不透明
 
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
+      #include <tonemapping_fragment> // レンダラー設定に応じトーンマップ
+      #include <colorspace_fragment> // sRGB出力など色空間変換
     }
   `,
 };

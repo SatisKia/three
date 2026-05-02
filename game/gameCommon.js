@@ -24,6 +24,25 @@ export const JIKI_SHOT_INTERVAL = 8;
 export const JIKI_SHOT_SPEED = 3.0;
 export const JIKI_SHOT_END = WAIT_1;
 
+export const ENEMY_Y_MIN = 40.0;
+
+export const BAKU_FRAME = (WAIT_1 / 4) | 0;
+
+export const ENEMY_TYPE_01 = 0;
+export const ENEMY_TYPE_02 = 1;
+
+export const ENEMY01_SPEED = 1.0;
+export const ENEMY01_ESCAPE = 50.0;
+export const ENEMY01_OUT = 150.0;
+
+export const ENEMY02_SPEED = 1.5;
+export const ENEMY02_ESCAPE = 50.0;
+export const ENEMY02_OUT = 150.0;
+
+export const ENEMY_SHOT_SPEED = 0.5;
+export const ENEMY_SHOT_RADIUS = 0.35 * 1.5;
+export const ENEMY_SHOT_END = WAIT_1 * 2;
+
 export const DEG2RAD = THREE.MathUtils.DEG2RAD; // Math.PI / 180
 
 export function _MOD(a, b) {
@@ -38,6 +57,37 @@ function forwardFromPitchYawDeg(rx, ry) {
   v.applyAxisAngle(new THREE.Vector3(1.0, 0.0, 0.0), rx * DEG2RAD);
   v.applyAxisAngle(new THREE.Vector3(0.0, 1.0, 0.0), ry * DEG2RAD);
   return v;
+}
+
+// ワールド単位のおおよその半径（バウンディングボックス最大辺の半分）
+export function modelBoundingRadius(root) {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  return Math.max(size.x, size.y, size.z) * 0.5;
+}
+
+export function checkHit(x1, y1, z1, r1, x2, y2, z2, r2) {
+  const x = x1 - x2;
+  const y = y1 - y2;
+  const z = z1 - z2;
+  return Math.sqrt(x * x + y * y + z * z) < r1 + r2;
+}
+
+export class MyRandom {
+  next(n) {
+    if (Math.random() < 0.5) {
+      return -Math.floor(Math.random() * n);
+    }
+    return Math.floor(Math.random() * n);
+  }
+
+  nextInt() {
+    if (Math.random() < 0.5) {
+      return -Math.floor(Math.random() * 0x80000000);
+    }
+    return Math.floor(Math.random() * 0x80000000);
+  }
 }
 
 // 自機
@@ -344,10 +394,266 @@ export class JikiShots {
   }
 }
 
-// ワールド単位のおおよその半径（バウンディングボックス最大辺の半分）
-export function modelBoundingRadius(root) {
-  const box = new THREE.Box3().setFromObject(root);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  return Math.max(size.x, size.y, size.z) * 0.5;
+function Enemy(self, type, x, y, z, vx, vy, vz, radius) {
+  self._type = type;
+  self._x = x;
+  self._y = y;
+  self._z = z;
+  self._tx = x + vx;
+  self._ty = y + vy;
+  self._tz = z + vz;
+  self._radius = radius;
+}
+
+export class Enemy01 {
+  constructor(x, y, z, vx, vy, vz, radius, flag, jikiRef) {
+    Enemy(this, ENEMY_TYPE_01, x, y, z, vx, vy, vz, radius);
+    const d = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1.0;
+    this._vx = vx / d;
+    this._vy = vy / d;
+    this._vz = vz / d;
+    this._target_vx = this._vx;
+    this._target_vy = this._vy;
+    this._target_vz = this._vz;
+    this._flag = flag;
+    this._r = 0.0;
+    this._elapse = 0;
+    this._step = 0;
+    this._jikiRef = jikiRef;
+  }
+  update() {
+    const jiki = this._jikiRef;
+    if (this._step === 1) {
+      if (_MOD(this._elapse, _DIV(WAIT_1, 15)) === 0) {
+        this._target_vx *= 1.1;
+        this._target_vy *= 1.1;
+        this._target_vz *= 1.1;
+        this._vx = (this._vx + this._target_vx / 4.0) / 1.1;
+        this._vy = (this._vy + this._target_vy / 4.0) / 1.1;
+        this._vz = (this._vz + this._target_vz / 4.0) / 1.1;
+      }
+      this._r += ((this._flag ? -360.0 : 360.0) / _DIV(WAIT_1, 2));
+    }
+    this._x += this._vx * ENEMY01_SPEED;
+    this._y += this._vy * ENEMY01_SPEED;
+    this._z += this._vz * ENEMY01_SPEED;
+    const dx = this._x - jiki.x();
+    const dy = this._y - jiki.y();
+    const dz = this._z - jiki.z();
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (distance > ENEMY01_OUT) return false;
+    if (distance < ENEMY01_ESCAPE && this._step === 0) {
+      this._target_vx = -(this._vx / 2.0 + jiki.vx());
+      this._target_vy = 0.0;
+      this._target_vz = -(this._vz / 2.0 + jiki.vz());
+      this._step = 1;
+    }
+    this._elapse++;
+    return true;
+  }
+  damage() {
+    return true;
+  }
+  type() {
+    return ENEMY_TYPE_01;
+  }
+  x() {
+    return this._x;
+  }
+  y() {
+    return this._y;
+  }
+  z() {
+    return this._z;
+  }
+  tx() {
+    return this._tx;
+  }
+  ty() {
+    return this._ty;
+  }
+  tz() {
+    return this._tz;
+  }
+  radius() {
+    return this._radius;
+  }
+  r() {
+    return this._r;
+  }
+}
+
+export class Enemy02 {
+  constructor(x, y, z, vx, vy, vz, radius, jikiRef, onEnemyShot) {
+    Enemy(this, ENEMY_TYPE_02, x, y, z, vx, vy, vz, radius);
+    const d = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1.0;
+    this._vx = vx / d;
+    this._vy = vy / d;
+    this._vz = vz / d;
+    this._r = 0.0;
+    this._step = 0;
+    this._jikiRef = jikiRef;
+    this._onEnemyShot = onEnemyShot;
+    const dir = new THREE.Vector3(-this._vx, 0.0, -this._vz);
+    if (dir.lengthSq() < 1e-12) dir.set(0.0, 0.0, 1.0);
+    else dir.normalize();
+    const m = new THREE.Matrix4();
+    m.lookAt(new THREE.Vector3(0.0, 0.0, 0.0), dir, new THREE.Vector3(0.0, 1.0, 0.0));
+    this._lookEuler = new THREE.Euler().setFromRotationMatrix(m, "YXZ");
+  }
+  update() {
+    const jiki = this._jikiRef;
+    if (this._step === 1) {
+      this._r -= 180.0 / _DIV(WAIT_1, 4);
+      if (this._r <= -180.0) {
+        this._r = -180.0;
+        this._vx = -(this._vx - jiki.vx());
+        this._vy = 0.0;
+        this._vz = -(this._vz - jiki.vz());
+        this._step = 2;
+      }
+    } else {
+      this._x += this._vx * ENEMY02_SPEED;
+      this._y += this._vy * ENEMY02_SPEED;
+      this._z += this._vz * ENEMY02_SPEED;
+      const dx = this._x - jiki.x();
+      const dy = this._y - jiki.y();
+      const dz = this._z - jiki.z();
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (distance > ENEMY02_OUT) return false;
+      if (distance < ENEMY02_ESCAPE && this._step === 0) {
+        this._onEnemyShot(this._x, this._y, this._z);
+        this._step = 1;
+      }
+    }
+    return true;
+  }
+  damage() {
+    return true;
+  }
+  type() {
+    return ENEMY_TYPE_02;
+  }
+  x() {
+    return this._x;
+  }
+  y() {
+    return this._y;
+  }
+  z() {
+    return this._z;
+  }
+  tx() {
+    return this._tx;
+  }
+  ty() {
+    return this._ty;
+  }
+  tz() {
+    return this._tz;
+  }
+  radius() {
+    return this._radius;
+  }
+  r() {
+    return this._r;
+  }
+  lookEuler() {
+    return this._lookEuler;
+  }
+}
+
+export class Baku {
+  constructor(x, y, z, vx, vy, vz) {
+    this._x = x;
+    this._y = y;
+    this._z = z;
+    this._vx = vx;
+    this._vy = vy;
+    this._vz = vz;
+    this._elapse = 0;
+  }
+  update() {
+    this._x += this._vx;
+    this._y += this._vy;
+    this._z += this._vz;
+    this._elapse++;
+    return this._elapse <= BAKU_FRAME;
+  }
+  x() {
+    return this._x;
+  }
+  y() {
+    return this._y;
+  }
+  z() {
+    return this._z;
+  }
+  trans() {
+    return (1.0 / BAKU_FRAME) * (BAKU_FRAME - (this._elapse - 1.0));
+  }
+}
+
+export class EnemyShot {
+  constructor(x, y, z, tx, ty, tz, radius, jikiRef) {
+    this._x = x;
+    this._y = y;
+    this._z = z;
+    this._tx = tx;
+    this._ty = ty;
+    this._tz = tz;
+    let vx = tx - x;
+    let vy = ty - y;
+    let vz = tz - z;
+    const d = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1.0;
+    this._vx = (vx / d) * ENEMY_SHOT_SPEED;
+    this._vy = (vy / d) * ENEMY_SHOT_SPEED;
+    this._vz = (vz / d) * ENEMY_SHOT_SPEED;
+    this._radius = radius;
+    this._elapse = 0;
+    this._elapse2 = 0;
+    const jx = x - jikiRef.x();
+    const jy = y - jikiRef.y();
+    const jz = z - jikiRef.z();
+    this._distance = Math.sqrt(jx * jx + jy * jy + jz * jz);
+  }
+  update(jiki) {
+    this._x += this._vx;
+    this._y += this._vy;
+    this._z += this._vz;
+    const dx = this._x - jiki.x();
+    const dy = this._y - jiki.y();
+    const dz = this._z - jiki.z();
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (distance > this._distance) {
+      this._distance = distance;
+      this._elapse2++;
+      if (this._elapse2 > ENEMY_SHOT_END) return false;
+    } else {
+      this._elapse2 = 0;
+    }
+    this._elapse++;
+    return true;
+  }
+  x() {
+    return this._x;
+  }
+  y() {
+    return this._y;
+  }
+  z() {
+    return this._z;
+  }
+  tx() {
+    return this._tx;
+  }
+  ty() {
+    return this._ty;
+  }
+  tz() {
+    return this._tz;
+  }
+  radius() {
+    return this._radius;
+  }
 }

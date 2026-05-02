@@ -28,9 +28,9 @@ const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 const canvas3d = document.getElementById("hoge_canvas");
 const canvas2d = document.getElementById("fuga_canvas");
 
-let focusDepth = 0.2; // 0～1。被写面の奥行きの目安。「focus = focusDepth * fogFar」にマップ
+let focusDepth = 0.33; // 0～1。被写面の奥行きの目安。「focus = focusDepth * fogFar」にマップ
 let focusRange = 0.8; // ピントの幅の目安（小さいほどボケ境界が急）。カメラレンズの絞り（アパチャー）に反映。光量と被写界深度（ピントの合う範囲）を調整。
-let maxBlur = 0.005; // 最大ぼかしの目安。BokehShaderのmaxblurにスケールして渡す
+let maxBlur = 0.0033; // 最大ぼかしの目安。BokehShaderのmaxblurにスケールして渡す
 const fogFar = 20.0;
 
 // BokehPassに渡すパラメータ
