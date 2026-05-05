@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script src="texture.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
+import { setAnimationLoop } from "./common.js";
+
+const drawHitFlag = false;
+
+const MODEL_DIR = "./model/";
+
+const FRAME_INTERVAL_MS = 1000 / WAIT_1;
+
+const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 12.0; // d2js版と見た目が同じになるように係数をかける
+
+const LIGHT_OFFSET_SCALE = 100;
+const SHADOW_MAP_WIDTH = 1024 * 4;
+const SHADOW_MAP_HEIGHT = 512 * 4;
+const SHADOW_ORTHO_TOP = 400.0;
+// MeshLambertMaterialでは環境光が影の中にも乗るので、環境光が強いほど影は薄く見える
+const SHADOW_AMBIENT_MULT = 0.8; // 係数を下げるほど影が濃く見えるが、全体的に暗くなる
+const SHADOW_DIRECTIONAL_MULT = 1.2; // 直射を少し上げて、全体的に暗くなるのを防ぐ
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const enemyHudProj = new THREE.Vector3();
+const hitProjNdc = new THREE.Vector3(); // 投影したワールド座標をNDC座標（Normalized Device Coordinates。-1～+1の正規化スクリーン座標）に変換
+const hitUnproj = new THREE.Vector3(); // NDC座標をワールド座標に変換
+
+// 投影＋横1px分のunprojectで画面上の半径を決める
+function drawHit(context, wx, wy, wz, radiusWorld) {
+  if (!drawHitFlag) return;
+  hitProjNdc.set(wx, wy, wz);
+  hitProjNdc.project(camera);
+  if (hitProjNdc.z < -1.0 || hitProjNdc.z > 1.0) return;
+  const ndcX = hitProjNdc.x;
+  const ndcY = hitProjNdc.y;
+  const ndcZ = hitProjNdc.z;
+  const ndcX1px = ndcX + 2.0 / canvas3d.width;
+  hitUnproj.set(ndcX1px, ndcY, ndcZ);
+  hitUnproj.unproject(camera);
+  const dx = wx - hitUnproj.x;
+  const dy = wy - hitUnproj.y;
+  const dz = wz - hitUnproj.z;
+  const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-8;
+  const rPx = radiusWorld / d;
+  const px = (ndcX * 0.5 + 0.5) * canvas2d.width;
+  const py = (-ndcY * 0.5 + 0.5) * canvas2d.height;
+  context.fillStyle = "rgba(255, 0, 255, 0.5)";
+  context.beginPath();
+  context.arc(px, py, rPx, 0, Math.PI * 2.0);
+  context.fill();
+}
+
+function applyShadowFlags(root, cast, receive) {
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.castShadow = cast;
+      obj.receiveShadow = receive;
+    }
+  });
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 1000.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+
+const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF * SHADOW_AMBIENT_MULT);
+const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF * SHADOW_DIRECTIONAL_MULT);
+dir.castShadow = true;
+dir.shadow.mapSize.set(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+const shadowCam = dir.shadow.camera;
+const shadowOrthoRight = SHADOW_ORTHO_TOP * (SHADOW_MAP_WIDTH / SHADOW_MAP_HEIGHT);
+shadowCam.left = -shadowOrthoRight;
+shadowCam.right = shadowOrthoRight;
+shadowCam.top = SHADOW_ORTHO_TOP;
+shadowCam.bottom = -SHADOW_ORTHO_TOP;
+shadowCam.near = 0.1;
+shadowCam.far = 1000.0;
+shadowCam.updateProjectionMatrix();
+dir.shadow.bias = -0.0002;
+dir.shadow.normalBias = 0.03;
+scene.add(amb, dir);
+scene.add(dir.target);
+
+const keys = {};
+window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+let jiki = new Jiki(1.0);
+let jikiModel = null;
+let groundTemplate = null;
+const groundModels = [];
+const jetList = [];
+let texJet = null;
+let texBaku = null;
+let texShot = null;
+let elapse = 0;
+let shotTemplate = null;
+let enemy01Template = null;
+let enemy02Template = null;
+let jikiShots = null;
+const shotModels = [];
+
+const enemies = [];
+const enemyShots = [];
+const bakus = [];
+
+let rand;
+
+let enemyRadius01 = 1.0;
+let enemyRadius02 = 1.0;
+
+let score = 0;
+
+function addBaku(x, y, z) {
+  const vx = rand.next(50) / 50.0;
+  const vy = rand.next(50) / 50.0;
+  const vz = rand.next(50) / 50.0;
+  const baku = new Baku(x, y, z, vx, vy, vz);
+  const material = new THREE.SpriteMaterial({
+    map: texBaku,
+    transparent: true,
+    depthWrite: false,
+  });
+  material.map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.setScalar(20.0);
+  scene.add(sprite);
+  bakus.push({ baku, sprite });
+}
+
+function addEnemyShot(x, y, z) {
+  const vx = jiki.x() - x;
+  const vy = jiki.y() - y;
+  const vz = jiki.z() - z;
+  const d = Math.sqrt(vx * vx + vy * vy + vz * vz) * 0.7;
+  const frame = d / ENEMY_SHOT_SPEED;
+  const tx = jiki.x() + jiki.vx() * JIKI_SPEED * frame;
+  const ty = jiki.y() + jiki.vy() * JIKI_SPEED * frame;
+  const tz = jiki.z() + jiki.vz() * JIKI_SPEED * frame;
+  const shot = new EnemyShot(x, y, z, tx, ty, tz, ENEMY_SHOT_RADIUS, jiki);
+  const material = new THREE.SpriteMaterial({
+    map: texShot,
+    transparent: true,
+    depthWrite: false,
+  });
+  material.map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.setScalar(1.0);
+  scene.add(sprite);
+  enemyShots.push({ shot, sprite });
+}
+
+function addEnemy01(flag) {
+  const jiki_vx = jiki.vx();
+  const jiki_vz = jiki.vz();
+  let x = jiki_vx * 150.0;
+  let y = jiki.y() + _MOD(rand.nextInt(), 10);
+  if (y < ENEMY_Y_MIN) y = ENEMY_Y_MIN;
+  let z = jiki_vz * 150.0;
+  if (flag === undefined) flag = rand.nextInt() < 0;
+  const th = (flag ? -20.0 : 20.0) * THREE.MathUtils.DEG2RAD;
+  const x0 = x;
+  const z0 = z;
+  x = Math.cos(th) * x0 + Math.sin(th) * z0;
+  z = -Math.sin(th) * x0 + Math.cos(th) * z0;
+  x += jiki.x() + _MOD(rand.nextInt(), 10);
+  z += jiki.z() + _MOD(rand.nextInt(), 10);
+  const vx = jiki.x() - x;
+  const vy = 0.0;
+  const vz = jiki.z() - z;
+  const d = Math.sqrt(vx * vx + vy * vy + vz * vz) * 0.6;
+  const frame = d / ENEMY01_SPEED;
+  const vx2 = jiki.x() + jiki.vx() * JIKI_SPEED * frame - x;
+  const vz2 = jiki.z() + jiki.vz() * JIKI_SPEED * frame - z;
+  const enemy = new Enemy01(x, y, z, vx2, vy, vz2, enemyRadius01 * 2.0, flag, jiki);
+  const model = enemy01Template.clone(true);
+  scene.add(model);
+  enemies.push({ kind: ENEMY_TYPE_01, enemy, model });
+}
+
+function addEnemy02(flag) {
+  const jiki_vx = jiki.vx();
+  const jiki_vz = jiki.vz();
+  let x = jiki_vx * 150.0;
+  let y = jiki.y() + _MOD(rand.nextInt(), 20);
+  if (y < ENEMY_Y_MIN) y = ENEMY_Y_MIN;
+  let z = jiki_vz * 150.0;
+  if (flag === undefined) flag = rand.nextInt() < 0;
+  const add = jiki.ry_add() * 70.0;
+  const th = ((flag ? -30.0 : 30.0) + add) * THREE.MathUtils.DEG2RAD;
+  const x0 = x;
+  const z0 = z;
+  x = Math.cos(th) * x0 + Math.sin(th) * z0;
+  z = -Math.sin(th) * x0 + Math.cos(th) * z0;
+  x += jiki.x() + _MOD(rand.nextInt(), 10);
+  z += jiki.z() + _MOD(rand.nextInt(), 10);
+  const vx = jiki.x() - x;
+  const vy = 0.0;
+  const vz = jiki.z() - z;
+  const d = Math.sqrt(vx * vx + vy * vy + vz * vz) * 0.75;
+  const frame = d / ENEMY02_SPEED;
+  const vx2 = jiki.x() + jiki.vx() * JIKI_SPEED * frame - x;
+  const vz2 = jiki.z() + jiki.vz() * JIKI_SPEED * frame - z;
+  const enemy = new Enemy02(x, y, z, vx2, vy, vz2, enemyRadius02 * 2.0, jiki, addEnemyShot);
+  const model = enemy02Template.clone(true);
+  scene.add(model);
+  enemies.push({ kind: ENEMY_TYPE_02, enemy, model });
+}
+
+function setGroundTiles() {
+  if (!groundTemplate) return; // init の load 完了前はアニメループが先に回る（キャッシュ空時に顕在化）
+  const gx = Math.floor(jiki.x() / GROUND_SIZE) * GROUND_SIZE;
+  const gz = Math.floor(jiki.z() / GROUND_SIZE) * GROUND_SIZE;
+  let i = 0;
+  for (let zz = -1; zz <= 1; zz++) {
+    for (let xx = -1; xx <= 1; xx++) {
+      if (!groundModels[i]) {
+        const m = groundTemplate.clone(true);
+        scene.add(m);
+        groundModels[i] = m;
+      }
+      groundModels[i].position.set(gx + GROUND_SIZE * xx, 0.0, gz + GROUND_SIZE * zz);
+      i++;
+    }
+  }
+}
+
+function addJetParticle(jet) {
+  const material = new THREE.SpriteMaterial({
+    map: texJet,
+    transparent: true,
+    depthWrite: false,
+  });
+  material.map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.setScalar(1.0);
+  scene.add(sprite);
+  jetList.push({ jet, sprite });
+}
+
+function syncShotModels() {
+  if (!jikiShots || !shotTemplate) return;
+  while (shotModels.length < jikiShots.size()) {
+    const m = shotTemplate.clone(true);
+    scene.add(m);
+    shotModels.push(m);
+  }
+  while (shotModels.length > jikiShots.size()) {
+    const m = shotModels.pop();
+    scene.remove(m);
+  }
+  for (let i = 0; i < jikiShots.size(); i++) {
+    const model = shotModels[i];
+    const s = jikiShots.get(i);
+    model.position.set(s.x(), s.y(), s.z());
+    model.lookAt(s.x() + s.vx(), s.y() + s.vy(), s.z() + s.vz());
+    // 7.htmlのupdateShotModelと同じ理由で「+rz」（d2jsの「-rz」相当の見え方）
+    model.rotateZ(THREE.MathUtils.degToRad(s.rz()));
+  }
+}
+
+async function init() {
+  try {
+    rand = new MyRandom();
+
+    const tl = new THREE.TextureLoader();
+    if (typeof textureSrc === "undefined" || textureSrc.length < 3) throw new Error("texture.js");
+    texJet = await tl.loadAsync(textureSrc[0]);
+    texBaku = await tl.loadAsync(textureSrc[1]);
+    texShot = await tl.loadAsync(textureSrc[2]);
+
+    groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
+    convertMaterialsToLambert(groundTemplate);
+    applySmoothShading(groundTemplate);
+    groundTemplate.scale.setScalar(6.0);
+    applyShadowFlags(groundTemplate, false, true);
+
+    jikiModel = await loadObjMtl(MODEL_DIR, "jiki");
+    convertMaterialsToLambert(jikiModel);
+    applySmoothShading(jikiModel);
+    jikiModel.scale.setScalar(0.01);
+    applyShadowFlags(jikiModel, true, false);
+    scene.add(jikiModel);
+    const jikiR = modelBoundingRadius(jikiModel) / 1.5;
+    jiki = new Jiki(jikiR);
+
+    shotTemplate = await loadObjMtl(MODEL_DIR, "jiki_shot");
+    applyDiffuse(shotTemplate, 1.0, 1.0, 0.0);
+    applyAmbient(shotTemplate, 2.0);
+    convertMaterialsToLambert(shotTemplate);
+    applySmoothShading(shotTemplate);
+    shotTemplate.scale.setScalar(0.01);
+    applyShadowFlags(shotTemplate, true, false);
+    jikiShots = new JikiShots(modelBoundingRadius(shotTemplate) * 1.5);
+
+    enemy01Template = await loadObjMtl(MODEL_DIR, "enemy01");
+    convertMaterialsToLambert(enemy01Template);
+    applySmoothShading(enemy01Template);
+    enemy01Template.scale.setScalar(0.02);
+    applyShadowFlags(enemy01Template, true, false);
+    enemyRadius01 = modelBoundingRadius(enemy01Template);
+
+    enemy02Template = await loadObjMtl(MODEL_DIR, "enemy02");
+    convertMaterialsToLambert(enemy02Template);
+    applySmoothShading(enemy02Template);
+    enemy02Template.scale.setScalar(0.02);
+    applyShadowFlags(enemy02Template, true, false);
+    enemyRadius02 = modelBoundingRadius(enemy02Template);
+
+    setGroundTiles();
+    for (let i = 0; i < 5; i++) addEnemy01();
+  } catch (e) {
+    console.error(e);
+  }
+}
+init();
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  elapse++;
+
+  jiki.update(
+    !!keys.ArrowUp,
+    !!keys.ArrowDown,
+    !!keys.ArrowLeft,
+    !!keys.ArrowRight
+  );
+  setGroundTiles();
+  if (jikiModel) jiki.pose(jikiModel);
+
+  if (texJet && _MOD(elapse, _DIV(WAIT_1, 15)) === 0) {
+    const vx = -jiki.vx() / WAIT_1;
+    const vy = -jiki.vy() / WAIT_1;
+    const vz = -jiki.vz() / WAIT_1;
+    const bx = jiki.x() - jiki.vx() * 1.5;
+    const by = jiki.y() - jiki.vy() * 1.5;
+    const bz = jiki.z() - jiki.vz() * 1.5;
+    const { right } = jiki.jetOffsetWorld();
+    addJetParticle(new JikiJet(bx + right.x, by + right.y, bz + right.z, vx, vy, vz));
+    addJetParticle(new JikiJet(bx - right.x, by - right.y, bz - right.z, vx, vy, vz));
+  }
+
+  for (let i = jetList.length - 1; i >= 0; i--) {
+    const { jet, sprite } = jetList[i];
+    if (!jet.update()) {
+      scene.remove(sprite);
+      sprite.material.map?.dispose?.();
+      sprite.material.dispose();
+      jetList.splice(i, 1);
+      continue;
+    }
+    sprite.position.set(jet.x(), jet.y(), jet.z());
+    sprite.material.opacity = jet.trans();
+  }
+
+  if (jikiShots) {
+    if (keys.Space) {
+      jikiShots.add(elapse, jiki.x(), jiki.y(), jiki.z(), jiki.vx(), jiki.vy(), jiki.vz(), jiki.rz());
+    }
+    jikiShots.update(true);
+    syncShotModels();
+
+    for (let i = jikiShots.size() - 1; i >= 0; i--) {
+      const s = jikiShots.get(i);
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const { enemy: en, model } = enemies[j];
+        if (
+          checkHit(s.x(), s.y(), s.z(), s.radius(), en.x(), en.y(), en.z(), en.radius())
+        ) {
+          if (en.damage()) {
+            const t = en.type();
+            addBaku(en.x(), en.y(), en.z());
+            scene.remove(model);
+            enemies.splice(j, 1);
+            {
+              const point = t === ENEMY_TYPE_01 ? 30.0 : 50.0;
+              const oldScore = score;
+              score += point;
+              if (oldScore < 2000.0 && score >= 2000.0) {
+                for (let k = 0; k < 5; k++) addEnemy02();
+              }
+            }
+            if (t === ENEMY_TYPE_01) addEnemy01();
+            else addEnemy02();
+          }
+          jikiShots.remove(i);
+          syncShotModels();
+          break;
+        }
+      }
+    }
+  }
+
+  for (let i = enemyShots.length - 1; i >= 0; i--) {
+    const { shot, sprite } = enemyShots[i];
+    if (!shot.update(jiki)) {
+      scene.remove(sprite);
+      sprite.material.map?.dispose?.();
+      sprite.material.dispose();
+      enemyShots.splice(i, 1);
+      continue;
+    }
+    sprite.position.set(shot.x(), shot.y(), shot.z());
+    if (
+      checkHit(shot.x(), shot.y(), shot.z(), shot.radius(), jiki.x(), jiki.y(), jiki.z(), jiki.radius())
+    ) {
+      addBaku(jiki.x(), jiki.y(), jiki.z());
+      scene.remove(sprite);
+      enemyShots.splice(i, 1);
+    }
+  }
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const entry = enemies[i];
+    const enemy = entry.enemy;
+    if (!enemy.update()) {
+      scene.remove(entry.model);
+      const t = enemy.type();
+      enemies.splice(i, 1);
+      if (t === ENEMY_TYPE_01) addEnemy01();
+      else addEnemy02();
+    } else {
+      const model = entry.model;
+      if (entry.kind === ENEMY_TYPE_01) {
+        model.position.set(enemy.x(), enemy.y(), enemy.z());
+        const d2r = THREE.MathUtils.DEG2RAD;
+        const my = new THREE.Matrix4().makeRotationY(jiki.ry() * d2r);
+        const mz = new THREE.Matrix4().makeRotationZ(enemy.r() * d2r);
+        const m = new THREE.Matrix4().multiplyMatrices(my, mz);
+        model.setRotationFromMatrix(m);
+      } else {
+        model.position.set(enemy.x(), enemy.y(), enemy.z());
+        model.rotation.copy(enemy.lookEuler());
+        model.rotateX(enemy.r() * THREE.MathUtils.DEG2RAD);
+      }
+    }
+  }
+
+  for (let i = bakus.length - 1; i >= 0; i--) {
+    const { baku, sprite } = bakus[i];
+    if (!baku.update()) {
+      scene.remove(sprite);
+      sprite.material.map?.dispose?.();
+      sprite.material.dispose();
+      bakus.splice(i, 1);
+      continue;
+    }
+    sprite.position.set(baku.x(), baku.y(), baku.z());
+    sprite.material.opacity = baku.trans();
+  }
+
+  const camera_vx = -jiki.vx() * 10.0;
+  const camera_vy = -jiki.vy() * 10.0;
+  const camera_vz = -jiki.vz() * 10.0;
+  const look_x = jiki.x();
+  const look_y = jiki.y() + 1.0; // 自機の少し上
+  const look_z = jiki.z();
+  const camera_x = look_x + camera_vx;
+  const camera_y = look_y + camera_vy + 1.0; // 少し上から見下ろす
+  const camera_z = look_z + camera_vz;
+  camera.position.set(camera_x, camera_y, camera_z);
+  camera.lookAt(look_x, look_y, look_z);
+
+  dir.position.set(
+    look_x - 0.85 * LIGHT_OFFSET_SCALE,
+    look_y + 0.8  * LIGHT_OFFSET_SCALE,
+    look_z - 0.75 * LIGHT_OFFSET_SCALE
+  );
+  dir.target.position.set(look_x, look_y, look_z);
+
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.strokeStyle = "rgb(0, 0, 0)";
+  context.strokeRect(0, 0, canvas2d.width - 1, canvas2d.height - 1);
+
+  if (jikiModel) {
+    drawHit(context, jiki.x(), jiki.y(), jiki.z(), jiki.radius());
+  }
+  if (jikiShots) {
+    for (let i = 0; i < jikiShots.size(); i++) {
+      const tmp = jikiShots.get(i);
+      drawHit(context, tmp.x(), tmp.y(), tmp.z(), tmp.radius());
+    }
+  }
+  for (let i = 0; i < enemies.length; i++) {
+    const tmp = enemies[i].enemy;
+    drawHit(context, tmp.x(), tmp.y(), tmp.z(), tmp.radius());
+  }
+  for (let i = 0; i < enemyShots.length; i++) {
+    const tmp = enemyShots[i].shot;
+    drawHit(context, tmp.x(), tmp.y(), tmp.z(), tmp.radius());
+  }
+
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "#000";
+  context.fillText("SCORE", 0, 24);
+  const str = String(score);
+  context.fillText(str, canvas2d.width / 3.0 - context.measureText(str).width, 24);
+
+  context.strokeStyle = "rgb(0, 255, 255)";
+  context.fillStyle = "rgb(0, 255, 255)";
+  context.lineWidth = 1.0;
+  context.font = "8px 'MS Gothic', sans-serif";
+  context.textBaseline = "bottom";
+  for (let i = 0; i < enemies.length; i++) {
+    const tmp = enemies[i].enemy;
+    enemyHudProj.set(tmp.x(), tmp.y(), tmp.z());
+    enemyHudProj.project(camera);
+    if (enemyHudProj.z < -1.0 || enemyHudProj.z > 1.0) continue;
+    const px = (enemyHudProj.x * 0.5 + 0.5) * canvas2d.width;
+    const py = (-enemyHudProj.y * 0.5 + 0.5) * canvas2d.height;
+    const dx = tmp.x() - jiki.x();
+    const dy = tmp.y() - jiki.y();
+    const dz = tmp.z() - jiki.z();
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    let seg = 50.0 - distance;
+    if (seg < 15.0) seg = 15.0;
+    const tx = px + seg + 20.0;
+    const ty = py - seg;
+    context.beginPath();
+    context.moveTo(px, py);
+    context.lineTo(px + seg, ty);
+    context.lineTo(tx, ty);
+    context.stroke();
+    const label = String((distance * 100.0) | 0);
+    const whole = label.slice(0, -2) || "0";
+    const frac = label.slice(-2).padStart(2, "0");
+    context.fillText(`${whole}.${frac}`, px + seg, ty);
+  }
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>
