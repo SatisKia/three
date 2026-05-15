@@ -50,6 +50,7 @@ window.addEventListener("keydown", (e) => { keys[e.code] = true; });
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
 
 const jiki = new Jiki(1.0);
+let jikiModel = null;
 let groundTemplate = null;
 const groundModels = [];
 
@@ -72,9 +73,7 @@ function setGroundTiles() {
   }
 }
 
-let jikiModel = null;
-
-async function init() {
+(async () => {
   try {
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);
@@ -91,8 +90,7 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
 setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   jiki.update(

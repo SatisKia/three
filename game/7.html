@@ -92,7 +92,7 @@ function addJetParticle(jet) {
   jetList.push({ jet, sprite });
 }
 
-async function init() {
+(async () => {
   try {
     const loader = new THREE.TextureLoader();
     const url = typeof textureSrc !== "undefined" && textureSrc[0] ? textureSrc[0] : "";
@@ -111,7 +111,7 @@ async function init() {
     scene.add(jikiModel);
 
     shotTemplate = await loadObjMtl(MODEL_DIR, "jiki_shot");
-    applyDiffuse(shotTemplate, 1.0, 1.0, 0.0);
+    applyDiffuse(shotTemplate, new THREE.Color(1.0, 1.0, 0.0));
     applyAmbient(shotTemplate, 2.0);
     convertMaterialsToLambert(shotTemplate);
     applySmoothShading(shotTemplate);
@@ -129,8 +129,7 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
 setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   elapse++;

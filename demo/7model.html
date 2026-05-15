@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { applyDiffuse, applyPhongSpecular, applySmoothShading, loadObjMtl } from "./loadObjMtl.js";
+import { setAnimationLoop } from "./common.js";
+
+const MODEL_DIR = "./model/";
+
+const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
+
+const AMBIENT_LIGHT_COEF = 0.1; // d2js版と見た目が同じになるように係数をかける
+const DIRECTIONAL_LIGHT_COEF = 3.5; // d2js版と見た目が同じになるように係数をかける
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 0.0, 3.0);
+camera.lookAt(0.0, 0.0, 0.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+(async () => {
+  try {
+    const model = await loadObjMtl(MODEL_DIR, "sphere");
+    applyDiffuse(model, 0xffffff); // MeshPhongMaterialのcolorに相当
+    applyPhongSpecular(model, new THREE.Color(0.5, 0.5, 0.5), 50.0); // MeshPhongMaterialのspecular/shininessに相当
+    applySmoothShading(model);
+    model.scale.setScalar(0.015);
+    model.position.set(0.0, 0.0, -3.0);
+    model.rotation.set(
+      THREE.MathUtils.degToRad(45.0), // X軸回転
+      THREE.MathUtils.degToRad(30.0), // Y軸回転
+      THREE.MathUtils.degToRad(15.0), // Z軸回転
+      "ZYX"
+    );
+    scene.add(model);
+  } catch (e) {
+    console.error(e);
+  }
+})();
+
+const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.position.set(0.85, 0.8, 0.75);
+scene.add(amb, dir);
+
+setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("Hello World !!", 0, 24);
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>

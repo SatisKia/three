@@ -18,7 +18,7 @@
 <script type="module">
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
-import { applyDiffuse, applyDiffuseDataUrlTextures, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromDataUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -31,7 +31,8 @@ const STEREO_EYE_SEP = 2 * STEREO_TRANS;
 const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
 const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
 
-const GROUND_PLANE_SIZE = 200 * 0.033;
+const GROUND_MODEL_SCALE = 0.033;
+const GROUND_PLANE_SIZE = 200 * GROUND_MODEL_SCALE;
 const REFLECTOR_COLOR = 0xffffff;
 const WATER_COLOR = 0x808080;
 const WATER_METALNESS = 0.12;
@@ -174,8 +175,6 @@ scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF);
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -185,6 +184,8 @@ dir.shadow.camera.left = -shadowExtent;
 dir.shadow.camera.right = shadowExtent;
 dir.shadow.camera.top = shadowExtent;
 dir.shadow.camera.bottom = -shadowExtent;
+dir.position.set(lightX, lightY, lightZ);
+dir.target.position.set(0.0, lookY, 0.0);
 scene.add(dir);
 scene.add(dir.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF));
@@ -215,30 +216,30 @@ function renderStereo() {
   renderer.setViewport(0, 0, bufW, bufH);
 }
 
-async function init() {
+(async () => {
   const specs = [
     { name: "witch", scale: 0.015, pos: [0.0, 0.05, 0.0], diffuse: 0.8 },
     { name: "cat", scale: 0.005, pos: [-1.5, 0.4, 0.5] },
     { name: "swan", scale: 0.005, pos: [2.0, 2.0, 0.5], kaBlend: 0.35 },
-    { name: "mesh", scale: 0.033, pos: [0.0, 1.2, -1.5] },
+    { name: "mesh", scale: GROUND_MODEL_SCALE, pos: [0.0, 1.2, -1.5] },
   ];
   try {
     for (const s of specs) {
       const root = await loadObjMtl(MODEL_DIR, s.name);
+      convertMaterialsToLambert(root);
       if (s.name === "witch") {
-        applyDiffuseDataUrlTextures(root, [
+        applyDiffuseMapsFromDataUrls(root, [
           { materialName: "kao", dataUrl: img_src[0] },
           { materialName: "body", dataUrl: img_src[1] },
           { materialName: "fire", dataUrl: img_src[2] },
         ]);
       }
       if (s.name === "mesh") {
-        applyDiffuseDataUrlTextures(root, [
+        applyDiffuseMapsFromDataUrls(root, [
           { materialName: "mat1", dataUrl: img_src_mesh },
         ]);
       }
-      convertMaterialsToLambert(root);
-      if (s.diffuse !== undefined) applyDiffuse(root, s.diffuse, s.diffuse, s.diffuse);
+      if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));
       if (s.kaBlend !== undefined) applyKaBlendToDiffuse(root, s.kaBlend);
       applySmoothShading(root);
       root.scale.setScalar(s.scale);
@@ -258,8 +259,7 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
 let elapse = 0;
 setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {

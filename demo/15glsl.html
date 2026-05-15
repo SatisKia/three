@@ -18,7 +18,7 @@
 <script type="module">
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
-import { applyDiffuse, applyDiffuseDataUrlTextures, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromDataUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -26,13 +26,16 @@ const MODEL_DIR = "./model/";
 const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
 const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
 
-const GROUND_PLANE_SIZE = 200 * 0.033;
+const GROUND_MODEL_SCALE = 0.033;
+const GROUND_PLANE_SIZE = 200 * GROUND_MODEL_SCALE;
 const REFLECTOR_COLOR = 0xffffff;
 const WATER_COLOR = 0x808080;
+const WATER_METALNESS = 0.05;
+const WATER_ROUGHNESS = 0.15;
 
 let dispMesh = false;
 let meshObjRoot = null;
-// 0=sin/cosの単純オフセット 1=重ね波（sinのみ） 2=重ね波＋ノイズ
+// 0=単純なsin×cos 1=重ね波（ノイズなし） 2=重ね波（ノイズあり）
 let waveType = 0;
 
 // Reflector既定フラグメントに、UVゆらぎを追加。gl_FragCoordベースでoffsetを積み、texture2DProj前に透視補正UVへ加える。
@@ -231,8 +234,8 @@ reflector.position.y = 0.01;
 const rippleUniforms = reflector.material.uniforms;
 const waterMaterial = new THREE.MeshStandardMaterial({
   color: WATER_COLOR,
-  metalness: 0.05,
-  roughness: 0.15,
+  metalness: WATER_METALNESS,
+  roughness: WATER_ROUGHNESS,
   transparent: true,
   opacity: 0.55,
   side: THREE.DoubleSide,
@@ -247,8 +250,6 @@ scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -258,34 +259,36 @@ dir.shadow.camera.left = -shadowExtent;
 dir.shadow.camera.right = shadowExtent;
 dir.shadow.camera.top = shadowExtent;
 dir.shadow.camera.bottom = -shadowExtent;
+dir.position.set(lightX, lightY, lightZ);
+dir.target.position.set(0.0, lookY, 0.0);
 scene.add(dir);
 scene.add(dir.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
 
-async function init() {
+(async () => {
   const specs = [
     { name: "witch", scale: 0.015, pos: [0.0, 0.05, 0.0], diffuse: 0.8 },
     { name: "cat", scale: 0.005, pos: [-1.5, 0.4, 0.5] },
     { name: "swan", scale: 0.005, pos: [2.0, 2.0, 0.5], kaBlend: 0.35 },
-    { name: "mesh", scale: 0.033, pos: [0.0, 1.2, -1.5] },
+    { name: "mesh", scale: GROUND_MODEL_SCALE, pos: [0.0, 1.2, -1.5] },
   ];
   try {
     for (const s of specs) {
       const root = await loadObjMtl(MODEL_DIR, s.name);
+      convertMaterialsToLambert(root);
       if (s.name === "witch") {
-        applyDiffuseDataUrlTextures(root, [
+        applyDiffuseMapsFromDataUrls(root, [
           { materialName: "kao", dataUrl: img_src[0] },
           { materialName: "body", dataUrl: img_src[1] },
           { materialName: "fire", dataUrl: img_src[2] },
         ]);
       }
       if (s.name === "mesh") {
-        applyDiffuseDataUrlTextures(root, [
+        applyDiffuseMapsFromDataUrls(root, [
           { materialName: "mat1", dataUrl: img_src_mesh },
         ]);
       }
-      convertMaterialsToLambert(root);
-      if (s.diffuse !== undefined) applyDiffuse(root, s.diffuse, s.diffuse, s.diffuse);
+      if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));
       if (s.kaBlend !== undefined) applyKaBlendToDiffuse(root, s.kaBlend);
       applySmoothShading(root);
       root.scale.setScalar(s.scale);
@@ -305,10 +308,9 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
-let mirrorElapse = 0;
+let elapse = 0;
 
 setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (keys.has("ArrowUp")) lightY += LIGHT_STEP;
@@ -318,8 +320,8 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
   if (keys.has("KeyZ")) lightZ += LIGHT_STEP;
   if (keys.has("KeyX")) lightZ -= LIGHT_STEP;
 
-  mirrorElapse += 1.0;
-  rippleUniforms.uElapse.value = mirrorElapse;
+  elapse += 1.0;
+  rippleUniforms.uElapse.value = elapse;
   rippleUniforms.uWaveType.value = waveType;
 
   scenePivot.rotation.set(
@@ -341,6 +343,7 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
   camera.lookAt(0.0, lookY, 0.0);
   renderer.render(scene, camera);
 
+  // 2Dグラフィック画面の描画
   const context = canvas2d.getContext("2d");
   context.clearRect(0, 0, canvas2d.width, canvas2d.height);
   context.font = "24px 'MS Gothic', sans-serif";

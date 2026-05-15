@@ -17,7 +17,7 @@
 <script type="module">
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
-import { applyDiffuse, applyDiffuseDataUrlTextures, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromDataUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -101,7 +101,7 @@ scene.add(dir);
 scene.add(dir.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
 
-async function init() {
+(async () => {
   const specs = [
     { name: "witch", scale: 0.015, pos: [0.0, 0.05, 0.0], diffuse: 0.8 },
     { name: "cat", scale: 0.005, pos: [-1.5, 0.4, 0.5] },
@@ -111,15 +111,15 @@ async function init() {
   try {
     for (const s of specs) {
       const root = await loadObjMtl(MODEL_DIR, s.name);
+      convertMaterialsToLambert(root);
       if (s.name === "witch") {
-        applyDiffuseDataUrlTextures(root, [
+        applyDiffuseMapsFromDataUrls(root, [
           { materialName: "kao", dataUrl: img_src[0] },
           { materialName: "body", dataUrl: img_src[1] },
           { materialName: "fire", dataUrl: img_src[2] },
         ]);
       }
-      convertMaterialsToLambert(root);
-      if (s.diffuse !== undefined) applyDiffuse(root, s.diffuse, s.diffuse, s.diffuse);
+      if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));
       if (s.kaBlend !== undefined) applyKaBlendToDiffuse(root, s.kaBlend);
       applySmoothShading(root);
       root.scale.setScalar(s.scale);
@@ -137,8 +137,7 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
 setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (keys.has("ArrowUp")) lightY += LIGHT_STEP;

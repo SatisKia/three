@@ -15,7 +15,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { applyDiffuse, applyDiffuseDataUrlTextures, applySmoothShading, convertMaterialsToBasic, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromDataUrls, applySmoothShading, convertMaterialsToBasic, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const useLight = false;
@@ -55,22 +55,25 @@ let rotateX = 0.0;
 let rotateY = 0.0;
 let meshRoot = null;
 
-async function init() {
+(async () => {
   try {
     const pivot = new THREE.Group();
     pivot.position.set(0.0, 2.5, 0.0);
     const root = await loadObjMtl(MODEL_DIR, "witch");
-    applyDiffuseDataUrlTextures(root, [
+    if (useLight) {
+      convertMaterialsToLambert(root);
+    } else {
+      convertMaterialsToBasic(root);
+    }
+    applyDiffuseMapsFromDataUrls(root, [
       { materialName: "kao", dataUrl: img_src[0] },
       { materialName: "body", dataUrl: img_src[1] },
       { materialName: "fire", dataUrl: img_src[2] },
     ]);
     if (useLight) {
-      convertMaterialsToLambert(root);
-      applyDiffuse(root, 0.8, 0.8, 0.8);
+      applyDiffuse(root, new THREE.Color(0.8, 0.8, 0.8));
     } else {
-      convertMaterialsToBasic(root);
-      applyDiffuse(root, 1.0, 1.0, 1.0);
+      applyDiffuse(root, new THREE.Color(1.0, 1.0, 1.0));
     }
     applySmoothShading(root);
     root.scale.setScalar(0.015);
@@ -82,8 +85,7 @@ async function init() {
   } catch (e) {
     console.error(e);
   }
-}
-init();
+})();
 
 setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (meshRoot) {

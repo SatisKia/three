@@ -123,7 +123,7 @@ const outputPass = new OutputPass();
 outputPass.renderToScreen = true; // OutputPassはキャンバスへ描画
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+const texture = loader.load(img_src);
 texture.colorSpace = THREE.SRGBColorSpace;
 texture.flipY = true;
 
