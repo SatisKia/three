@@ -169,10 +169,12 @@ water.rotation.x = -Math.PI / 2;
 water.position.y = 0.02;
 water.renderOrder = 1;
 water.layers.set(1);
+water.receiveShadow = true;
 scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.layers.enable(1); // 水面はレイヤ1。影の投射・受光の対象に含める
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;

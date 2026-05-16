@@ -38,6 +38,132 @@ let meshObjRoot = null;
 // 0=単純なsin×cos 1=重ね波（ノイズなし） 2=重ね波（ノイズあり）
 let waveType = 0;
 
+// 反射(mirrorShader)と影(地面のsceneShader)で異なった振幅を設定できるように
+const REFLECT_RIPPLE_AMPLITUDE_X = 0.001 * 20;
+const REFLECT_RIPPLE_AMPLITUDE_Y = 0.001;
+const SHADOW_RIPPLE_AMPLITUDE_X = 0.001 * 20;
+const SHADOW_RIPPLE_AMPLITUDE_Y = 0.001;
+
+const waterRippleUniforms = {
+  uWaveType: { value: 0 },
+  uFrequencyX: { value: 0.1 },
+  uFrequencyY: { value: 0.1 },
+  uAmplitudeX: { value: REFLECT_RIPPLE_AMPLITUDE_X },
+  uAmplitudeY: { value: REFLECT_RIPPLE_AMPLITUDE_Y },
+  uShadowAmplitudeX: { value: SHADOW_RIPPLE_AMPLITUDE_X },
+  uShadowAmplitudeY: { value: SHADOW_RIPPLE_AMPLITUDE_Y },
+  uSpeedX: { value: 0.5 },
+  uSpeedY: { value: 0.5 },
+  uElapse: { value: 0.0 },
+  uNoiseScale: { value: 0.02 },
+  uNoiseTimeScale: { value: 0.1 },
+  uNoiseStrength: { value: 0.2 },
+  uNoiseAmplitude: { value: 0.5 },
+};
+
+const WATER_RIPPLE_GLSL = /*glsl*/`
+  uniform int uWaveType; // 0=単純sin/cos 1=重ねsinのみ 2=重ねsin＋ノイズ（フラグメント内分岐）
+  uniform float uFrequencyX, uFrequencyY; // 波の画面空間における頻度（X/Y別）
+  uniform float uSpeedX, uSpeedY; // 時間uElapseに対する進行スピード
+  uniform float uElapse; // 経過タイム（フレームカウント等を蓄積した値）
+  uniform float uNoiseScale; // ノイズ座標の空間スケール
+  uniform float uNoiseTimeScale; // ノイズに時間を載せる量
+  uniform float uNoiseStrength; // ノイズを位相へ効かせる強さの係数
+  uniform float uNoiseAmplitude; // 振幅へノイズを掛ける際の係数
+
+  float rippleRandom(vec2 st) { // [0,1)のハッシュ値：擬似乱数1サンプル
+    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123); // 正弦＋フラクタルの定番式
+  }
+
+  float rippleSmoothNoise(vec2 st) { // セル単位バイリニア風な滑らかノイズ
+    vec2 i = floor(st); // 格子の左下インデックス
+    vec2 f = fract(st); // 格子内の小数オフセット[0,1)^2
+    float a = rippleRandom(i); // 左下コーナーの乱数
+    float b = rippleRandom(i + vec2(1.0, 0.0)); // 右下
+    float c = rippleRandom(i + vec2(0.0, 1.0)); // 左上
+    float d = rippleRandom(i + vec2(1.0, 1.0)); // 右上
+    vec2 u = f * f * (3.0 - 2.0 * f); // smoothstep相当で端を滑らかに
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y; // 双線形ブレンド
+  }
+
+  float rippleNoise(vec2 st, float scale) { // FB M風オクターブ：粗さscaleで4段重ね
+    float value = 0.0; // 蓄積ノイズ
+    float amplitude = 1.0; // 現在オクターブの重み
+    float frequency = 1.0; // 現在オクターブの周波数倍率
+    for (int i = 0; i < 4; i++) { // オクターブ4回ループ（WebGLで定数のみ）
+      value += amplitude * rippleSmoothNoise(st * frequency * scale); // 細かさを増しながら加算
+      amplitude *= 0.5; // 高周波ほど振幅を弱める
+      frequency *= 2.0; // 次オクターブは2倍細かく
+    }
+    return value; // [0付近～]のノイズ和
+  }
+
+  float rippleWave(float x, float y, float freq, float amp, float speed, float time, float dx, float dy) {
+    // 画面ピクセル座標由来の(x,y)、方向(dx,dy)で進行する波オフセット1成分
+    if (uWaveType == 1) { // Type1：純sin、ノイズなし（重ね合わせは呼び出し側）
+      float wave = sin(x * dx * freq + y * dy * freq + time * speed); // 位相項
+      return wave * amp; // 振幅調整済み値
+    } else { // Type2など：ノイズで位相と振幅を変調（Type1は上記ifでreturn済み）
+      vec2 noiseCoord = vec2(x * dx * uNoiseScale, y * dy * uNoiseScale + time * uNoiseTimeScale); // ノイズ用UV
+      float noiseValue = rippleNoise(noiseCoord, 1.0) * uNoiseStrength; // スケール1のnoiseを強さで調整
+      float wave = sin(x * dx * freq + y * dy * freq + time * speed + noiseValue * 3.14159); // PIで位相ゆらぐsin
+      return wave * amp * (1.0 + noiseValue * uNoiseAmplitude); // 振幅もノイズで変調
+    }
+  }
+
+  vec2 waterRippleOffset(vec2 amplitude) {
+    float offsetX = 0.0; // テクスチャ空間での横方向ゆらぎ（加算単位）
+    if (uFrequencyX != 0.0) { // X頻度0なら計算省略
+      if (uWaveType == 0) { // Type0：画面Xに沿った単一sinオフセット
+        offsetX = sin(gl_FragCoord.x * uFrequencyX + uElapse * uSpeedX) * amplitude.x; // ピクセル座標依存
+      } else { // Type1/2：3本の波を重ね（周波数・振幅・進行係数ずらし）
+        offsetX += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX, amplitude.x, uSpeedX, uElapse, 1.0, 0.0); // メイン進行+X
+        offsetX += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 0.7, amplitude.x * 0.5, uSpeedX * 0.8, uElapse, 0.7, 0.7); // 斜め系
+        offsetX += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 1.5, amplitude.x * 0.3, uSpeedX * 1.2, uElapse, 0.3, 0.9); // 細ripple
+      }
+    }
+    float offsetY = 0.0; // 縦方向ゆらぎ
+    if (uFrequencyY != 0.0) { // Y頻度0省略
+      if (uWaveType == 0) { // cosでY依存（Xはsinと対）
+        offsetY = cos(gl_FragCoord.y * uFrequencyY + uElapse * uSpeedY) * amplitude.y;
+      } else { // Y方向にも3成分重ね
+        offsetY += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY, amplitude.y, uSpeedY, uElapse, 0.0, 1.0);
+        offsetY += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 0.7, amplitude.y * 0.5, uSpeedY * 0.8, uElapse, 0.7, 0.7);
+        offsetY += rippleWave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 1.5, amplitude.y * 0.3, uSpeedY * 1.2, uElapse, 0.3, 0.9);
+      }
+    }
+    return vec2(offsetX, offsetY);
+  }
+`;
+
+const WATER_SHADOW_RIPPLE_UNIFORM_DECL = /*glsl*/`
+  uniform float uShadowAmplitudeX, uShadowAmplitudeY;
+`;
+
+function linkRippleUniforms(targetUniforms, sourceUniforms) {
+  // ReflectorはUniformsUtils.cloneするため、共有参照に差し替えないとuElapseが更新されない
+  for (const key of Object.keys(sourceUniforms)) {
+    if (targetUniforms[key] !== undefined) targetUniforms[key] = sourceUniforms[key];
+  }
+}
+
+function applyWaterShadowRipple(material, rippleUniforms) {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, rippleUniforms);
+    const patchedShadowChunk =
+      WATER_RIPPLE_GLSL + WATER_SHADOW_RIPPLE_UNIFORM_DECL +
+      THREE.ShaderChunk.shadowmap_pars_fragment.replace(
+        "shadowCoord.xyz /= shadowCoord.w;",
+        "shadowCoord.xy += waterRippleOffset(vec2(uShadowAmplitudeX, uShadowAmplitudeY)) * shadowCoord.w; shadowCoord.xyz /= shadowCoord.w;"
+      );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <shadowmap_pars_fragment>",
+      patchedShadowChunk
+    );
+  };
+  material.customProgramCacheKey = () => "waterShadowRipple";
+}
+
 // Reflector既定フラグメントに、UVゆらぎを追加。gl_FragCoordベースでoffsetを積み、texture2DProj前に透視補正UVへ加える。
 const WaterRippleReflectorShader = {
   name: "WaterRippleReflectorShader",
@@ -45,18 +171,18 @@ const WaterRippleReflectorShader = {
     color: { value: new THREE.Color(0x7f7f7f) },
     tDiffuse: { value: null },
     textureMatrix: { value: new THREE.Matrix4() },
-    uWaveType: { value: 0 },
-    uFrequencyX: { value: 0.1 },
-    uFrequencyY: { value: 0.1 },
-    uAmplitudeX: { value: 0.001 * 20 },
-    uAmplitudeY: { value: 0.001 },
-    uSpeedX: { value: 0.5 },
-    uSpeedY: { value: 0.5 },
-    uElapse: { value: 0.0 },
-    uNoiseScale: { value: 0.02 },
-    uNoiseTimeScale: { value: 0.1 },
-    uNoiseStrength: { value: 0.2 },
-    uNoiseAmplitude: { value: 0.5 },
+    uWaveType: waterRippleUniforms.uWaveType,
+    uFrequencyX: waterRippleUniforms.uFrequencyX,
+    uFrequencyY: waterRippleUniforms.uFrequencyY,
+    uAmplitudeX: waterRippleUniforms.uAmplitudeX,
+    uAmplitudeY: waterRippleUniforms.uAmplitudeY,
+    uSpeedX: waterRippleUniforms.uSpeedX,
+    uSpeedY: waterRippleUniforms.uSpeedY,
+    uElapse: waterRippleUniforms.uElapse,
+    uNoiseScale: waterRippleUniforms.uNoiseScale,
+    uNoiseTimeScale: waterRippleUniforms.uNoiseTimeScale,
+    uNoiseStrength: waterRippleUniforms.uNoiseStrength,
+    uNoiseAmplitude: waterRippleUniforms.uNoiseAmplitude,
   },
   vertexShader: /*glsl*/`
     uniform mat4 textureMatrix; // Reflectorが渡す、反射サンプル用の投影行列（4x4）
@@ -71,65 +197,17 @@ const WaterRippleReflectorShader = {
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); // クリップ空間での頂点位置
       #include <logdepthbuf_vertex> // 対数デプス用にgl_Positionを補正
     }
-
   `,
   fragmentShader: /*glsl*/`
     uniform vec3 color; // オーバーレイ合成用ティントRGB（blendOverlayのブレンド相手）
     uniform sampler2D tDiffuse; // Reflectorがセットするオフスクリーンの反射カラーバッファ
-
-    uniform int uWaveType; // 0=単純sin/cos 1=重ねsinのみ 2=重ねsin＋ノイズ（フラグメント内分岐）
-    uniform float uFrequencyX, uFrequencyY; // 波の画面空間における頻度（X/Y別）
-    uniform float uAmplitudeX, uAmplitudeY; // UVオフセットの振幅（ゆらぎの強さ）
-    uniform float uSpeedX, uSpeedY; // 時間uElapseに対する進行スピード
-    uniform float uElapse; // 経過タイム（フレームカウント等を蓄積した値）
-    uniform float uNoiseScale; // ノイズ座標の空間スケール
-    uniform float uNoiseTimeScale; // ノイズに時間を載せる量
-    uniform float uNoiseStrength; //ノイズを位相へ効かせる強さの係数
-    uniform float uNoiseAmplitude; // 振幅へノイズを掛ける際の係数
+    uniform float uAmplitudeX, uAmplitudeY; // 反射UVゆらぎの振幅
 
     varying vec4 vTextureCoord; // 頂点から補間された投射用同次座標
 
     #include <logdepthbuf_pars_fragment> // 対数デプス用フラグメント側事前宣言チャンク
 
-    float random(vec2 st) { // [0,1)のハッシュ値：擬似乱数1サンプル
-      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123); // 正弦＋フラクタルの定番式
-    }
-
-    float smoothNoise(vec2 st) { // セル単位バイリニア風な滑らかノイズ
-      vec2 i = floor(st); // 格子の左下インデックス
-      vec2 f = fract(st); // 格子内の小数オフセット[0,1)^2
-      float a = random(i); // 左下コーナーの乱数
-      float b = random(i + vec2(1.0, 0.0)); // 右下
-      float c = random(i + vec2(0.0, 1.0)); // 左上
-      float d = random(i + vec2(1.0, 1.0)); // 右上
-      vec2 u = f * f * (3.0 - 2.0 * f); // smoothstep相当で端を滑らかに
-      return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y; // 双線形ブレンド
-    }
-
-    float noise(vec2 st, float scale) { // FB M風オクターブ：粗さscaleで4段重ね
-      float value = 0.0; // 蓄積ノイズ
-      float amplitude = 1.0; // 現在オクターブの重み
-      float frequency = 1.0; // 現在オクターブの周波数倍率
-      for (int i = 0; i < 4; i++) { // オクターブ4回ループ（WebGLで定数のみ）
-        value += amplitude * smoothNoise(st * frequency * scale); // 細かさを増しながら加算
-        amplitude *= 0.5; // 高周波ほど振幅を弱める
-        frequency *= 2.0; // 次オクターブは2倍細かく
-      }
-      return value; // [0付近～]のノイズ和
-    }
-
-    float wave(float x, float y, float freq, float amp, float speed, float time, float dx, float dy) {
-      // 画面ピクセル座標由来の(x,y)、方向(dx,dy)で進行する波オフセット1成分
-      if (uWaveType == 1) { // Type1：純sin、ノイズなし（重ね合わせは呼び出し側）
-        float wave = sin(x * dx * freq + y * dy * freq + time * speed); // 位相項
-        return wave * amp; // 振幅調整済み値
-      } else { // Type2など：ノイズで位相と振幅を変調（Type1は上記ifでreturn済み）
-        vec2 noiseCoord = vec2(x * dx * uNoiseScale, y * dy * uNoiseScale + time * uNoiseTimeScale); // ノイズ用UV
-        float noiseValue = noise(noiseCoord, 1.0) * uNoiseStrength; // スケール1のnoiseを強さで調整
-        float wave = sin(x * dx * freq + y * dy * freq + time * speed + noiseValue * 3.14159); // PIで位相ゆらぐsin
-        return wave * amp * (1.0 + noiseValue * uNoiseAmplitude); // 振幅もノイズで変調
-      }
-    }
+    ${WATER_RIPPLE_GLSL}
 
     float blendOverlay(float base, float blend) { // スカラー1チャンネル・オーバーレイブレンド
       return (base < 0.5 ? (2.0 * base * blend) : (1.0 - 2.0 * (1.0 - base) * (1.0 - blend))); // Photoshop風overlay
@@ -146,31 +224,11 @@ const WaterRippleReflectorShader = {
     void main() { // 各フラグメント1回：波でUVゆらして反射をサンプル
       #include <logdepthbuf_fragment> // 対数デプス用フラグメント本処理チャンク
 
-      float offsetX = 0.0; // テクスチャ空間での横方向ゆらぎ（加算単位）
-      if (uFrequencyX != 0.0) { // X頻度0なら計算省略
-        if (uWaveType == 0) { // Type0：画面Xに沿った単一sinオフセット
-          offsetX = sin(gl_FragCoord.x * uFrequencyX + uElapse * uSpeedX) * uAmplitudeX; // ピクセル座標依存
-        } else { // Type1/2：3本の波を重ね（周波数・振幅・進行係数ずらし）
-          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX, uAmplitudeX, uSpeedX, uElapse, 1.0, 0.0); // メイン進行+X
-          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 0.7, uAmplitudeX * 0.5, uSpeedX * 0.8, uElapse, 0.7, 0.7); // 斜め系
-          offsetX += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyX * 1.5, uAmplitudeX * 0.3, uSpeedX * 1.2, uElapse, 0.3, 0.9); // 細ripple
-        }
-      }
-      float offsetY = 0.0; // 縦方向ゆらぎ
-      if (uFrequencyY != 0.0) { // Y頻度0省略
-        if (uWaveType == 0) { // cosでY依存（Xはsinと対）
-          offsetY = cos(gl_FragCoord.y * uFrequencyY + uElapse * uSpeedY) * uAmplitudeY;
-        } else { // Y方向にも3成分重ね
-          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY, uAmplitudeY, uSpeedY, uElapse, 0.0, 1.0);
-          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 0.7, uAmplitudeY * 0.5, uSpeedY * 0.8, uElapse, 0.7, 0.7);
-          offsetY += wave(gl_FragCoord.x, gl_FragCoord.y, uFrequencyY * 1.5, uAmplitudeY * 0.3, uSpeedY * 1.2, uElapse, 0.3, 0.9);
-        }
-      }
+      vec2 ripple = waterRippleOffset(vec2(uAmplitudeX, uAmplitudeY));
 
       float w = vTextureCoord.w; // 透視除算用の同次w（標準投射では奥行き関連）
       vec2 uv = vTextureCoord.xy / w; // 正規化デバイス前の同次から射影済みUV相当の2次元
-      uv.x += offsetX; // XゆらぎをUVに反映
-      uv.y += offsetY; // Yゆらぎ反映
+      uv += ripple; // ゆらぎをUVに反映
       vec4 distortedUv = vec4(uv * w, vTextureCoord.z, w); // Proj用にxyを再度wでスケール、zとwは元を踏襲
 
       vec4 base = texture2DProj(tDiffuse, distortedUv); // 歪んだ同次座標で反射テクスチャを投射サンプル
@@ -231,7 +289,7 @@ const reflector = new Reflector(waterGeometry, {
 });
 reflector.rotation.x = -Math.PI / 2;
 reflector.position.y = 0.01;
-const rippleUniforms = reflector.material.uniforms;
+linkRippleUniforms(reflector.material.uniforms, waterRippleUniforms);
 const waterMaterial = new THREE.MeshStandardMaterial({
   color: WATER_COLOR,
   metalness: WATER_METALNESS,
@@ -246,10 +304,13 @@ water.rotation.x = -Math.PI / 2;
 water.position.y = 0.02;
 water.renderOrder = 1;
 water.layers.set(1);
+water.receiveShadow = true;
+applyWaterShadowRipple(waterMaterial, waterRippleUniforms);
 scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+dir.layers.enable(1); // 水面はレイヤ1。影の投射・受光の対象に含める
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -321,8 +382,8 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
   if (keys.has("KeyX")) lightZ -= LIGHT_STEP;
 
   elapse += 1.0;
-  rippleUniforms.uElapse.value = elapse;
-  rippleUniforms.uWaveType.value = waveType;
+  waterRippleUniforms.uElapse.value = elapse;
+  waterRippleUniforms.uWaveType.value = waveType;
 
   scenePivot.rotation.set(
     THREE.MathUtils.degToRad(rotateX),

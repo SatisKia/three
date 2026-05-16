@@ -66,22 +66,22 @@ function renderStereo() {
   stereoCamera.cameraL.layers.mask = camera.layers.mask;
   stereoCamera.cameraR.layers.mask = camera.layers.mask;
 
-  const bufW = renderer.domElement.width;
-  const bufH = renderer.domElement.height;
-  const halfBuf = Math.floor(bufW / 2);
+  const size = new THREE.Vector2();
+  renderer.getSize(size);
+  const halfW = Math.floor(size.width / 2);
 
   renderer.setScissorTest(true);
 
-  renderer.setViewport(0, 0, halfBuf, bufH);
-  renderer.setScissor(0, 0, halfBuf, bufH);
+  renderer.setViewport(0, 0, halfW, size.height);
+  renderer.setScissor(0, 0, halfW, size.height);
   renderer.render(scene, stereoCamera.cameraL);
 
-  renderer.setViewport(halfBuf, 0, halfBuf, bufH);
-  renderer.setScissor(halfBuf, 0, halfBuf, bufH);
+  renderer.setViewport(halfW, 0, halfW, size.height);
+  renderer.setScissor(halfW, 0, halfW, size.height);
   renderer.render(scene, stereoCamera.cameraR);
 
   renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, bufW, bufH);
+  renderer.setViewport(0, 0, size.width, size.height);
 }
 
 setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {

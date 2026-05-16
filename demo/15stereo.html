@@ -171,10 +171,12 @@ water.rotation.x = -Math.PI / 2;
 water.position.y = 0.02;
 water.renderOrder = 1;
 water.layers.set(1);
+water.receiveShadow = true;
 scenePivot.add(reflector);
 scenePivot.add(water);
 
 const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF);
+dir.layers.enable(1); // 水面はレイヤ1。影の投射・受光の対象に含める
 dir.castShadow = true;
 dir.shadow.mapSize.set(2048, 2048);
 dir.shadow.camera.near = 0.5;
@@ -198,22 +200,23 @@ function renderStereo() {
   stereoCamera.cameraL.layers.mask = camera.layers.mask;
   stereoCamera.cameraR.layers.mask = camera.layers.mask;
 
-  const bufW = renderer.domElement.width;
-  const bufH = renderer.domElement.height;
-  const halfBuf = Math.floor(bufW / 2);
+  // setViewport/setScissorは論理ピクセル指定（内部でpixelRatioを掛ける）
+  const size = new THREE.Vector2();
+  renderer.getSize(size); // renderer.domElement.width/renderer.domElement.heightは使えない
+  const halfW = Math.floor(size.width / 2);
 
   renderer.setScissorTest(true);
 
-  renderer.setViewport(0, 0, halfBuf, bufH);
-  renderer.setScissor(0, 0, halfBuf, bufH);
+  renderer.setViewport(0, 0, halfW, size.height);
+  renderer.setScissor(0, 0, halfW, size.height);
   renderer.render(scene, stereoCamera.cameraL);
 
-  renderer.setViewport(halfBuf, 0, halfBuf, bufH);
-  renderer.setScissor(halfBuf, 0, halfBuf, bufH);
+  renderer.setViewport(halfW, 0, halfW, size.height);
+  renderer.setScissor(halfW, 0, halfW, size.height);
   renderer.render(scene, stereoCamera.cameraR);
 
   renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, bufW, bufH);
+  renderer.setViewport(0, 0, size.width, size.height);
 }
 
 (async () => {
