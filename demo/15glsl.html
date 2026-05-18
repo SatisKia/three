@@ -140,16 +140,9 @@ const WATER_SHADOW_RIPPLE_UNIFORM_DECL = /*glsl*/`
   uniform float uShadowAmplitudeX, uShadowAmplitudeY;
 `;
 
-function linkRippleUniforms(targetUniforms, sourceUniforms) {
-  // ReflectorはUniformsUtils.cloneするため、共有参照に差し替えないとuElapseが更新されない
-  for (const key of Object.keys(sourceUniforms)) {
-    if (targetUniforms[key] !== undefined) targetUniforms[key] = sourceUniforms[key];
-  }
-}
-
-function applyWaterShadowRipple(material, rippleUniforms) {
+function applyWaterShadowRipple(material) {
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, rippleUniforms);
+    Object.assign(shader.uniforms, waterRippleUniforms);
     const patchedShadowChunk =
       WATER_RIPPLE_GLSL + WATER_SHADOW_RIPPLE_UNIFORM_DECL +
       THREE.ShaderChunk.shadowmap_pars_fragment.replace(
@@ -289,7 +282,10 @@ const reflector = new Reflector(waterGeometry, {
 });
 reflector.rotation.x = -Math.PI / 2;
 reflector.position.y = 0.01;
-linkRippleUniforms(reflector.material.uniforms, waterRippleUniforms);
+// ReflectorはUniformsUtils.cloneするため、共有参照に差し替えないとuElapseが更新されない
+for (const key of Object.keys(waterRippleUniforms)) {
+  if (reflector.material.uniforms[key] !== undefined) reflector.material.uniforms[key] = waterRippleUniforms[key];
+}
 const waterMaterial = new THREE.MeshStandardMaterial({
   color: WATER_COLOR,
   metalness: WATER_METALNESS,
@@ -305,7 +301,7 @@ water.position.y = 0.02;
 water.renderOrder = 1;
 water.layers.set(1);
 water.receiveShadow = true;
-applyWaterShadowRipple(waterMaterial, waterRippleUniforms);
+applyWaterShadowRipple(waterMaterial);
 scenePivot.add(reflector);
 scenePivot.add(water);
 

@@ -63,14 +63,14 @@ const DOFShader = {
     uColorSampler: { value: null },
     uDepthSampler: { value: null },
 
-    cameraNear: { value: camera.near },
-    cameraFar: { value: camera.far },
-    fogFar: { value: fogFar },
-    focusDepth: { value: focusDepth },
-    focusRange: { value: focusRange },
-    maxBlur: { value: maxBlur },
+    uCameraNear: { value: camera.near },
+    uCameraFar: { value: camera.far },
+    uFogFar: { value: fogFar },
+    uFocusDepth: { value: focusDepth },
+    uFocusRange: { value: focusRange },
+    uMaxBlur: { value: maxBlur },
   },
-  vertexShader: `
+  vertexShader: /*glsl*/`
     varying vec2 vTextureCoord;
 
     void main() {
@@ -79,28 +79,28 @@ const DOFShader = {
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
-  fragmentShader: `
+  fragmentShader: /*glsl*/`
     precision mediump float;
 
     uniform sampler2D uColorSampler;
     uniform sampler2D uDepthSampler;
 
-    uniform float cameraNear;
-    uniform float cameraFar;
-    uniform float fogFar;
-    uniform float focusDepth; // 焦点距離
-    uniform float focusRange; // ピントが合っているとみなす範囲
-    uniform float maxBlur; // 最大ぼかし量
+    uniform float uCameraNear;
+    uniform float uCameraFar;
+    uniform float uFogFar;
+    uniform float uFocusDepth; // 焦点距離
+    uniform float uFocusRange; // ピントが合っているとみなす範囲
+    uniform float uMaxBlur; // 最大ぼかし量
 
     varying vec2 vTextureCoord;
 
     void main() {
       float fragCoordZ = texture2D(uDepthSampler, vTextureCoord).r;
-      float viewZ = (cameraNear * cameraFar) / ((cameraFar - cameraNear) * fragCoordZ - cameraFar); // 透視投影の深度を視点深度に変換
-      float depthNorm = clamp(abs(viewZ) / fogFar, 0.0, 1.0);
+      float viewZ = (uCameraNear * uCameraFar) / ((uCameraFar - uCameraNear) * fragCoordZ - uCameraFar); // 透視投影の深度を視点深度に変換
+      float depthNorm = clamp(abs(viewZ) / uFogFar, 0.0, 1.0);
 
-      float blur = abs(depthNorm - focusDepth) / focusRange;
-      float amount = clamp(blur, 0.0, 1.0) * maxBlur;
+      float blur = abs(depthNorm - uFocusDepth) / uFocusRange;
+      float amount = clamp(blur, 0.0, 1.0) * uMaxBlur;
 
       vec4 color = vec4(0.0);
       float total = 0.0;
@@ -171,11 +171,11 @@ setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
     spr.rotation.copy(camera.rotation);
   }
 
-  dofPass.uniforms.cameraNear.value = camera.near;
-  dofPass.uniforms.cameraFar.value = camera.far;
-  dofPass.uniforms.focusDepth.value = focusDepth;
-  dofPass.uniforms.focusRange.value = focusRange;
-  dofPass.uniforms.maxBlur.value = maxBlur;
+  dofPass.uniforms.uCameraNear.value = camera.near;
+  dofPass.uniforms.uCameraFar.value = camera.far;
+  dofPass.uniforms.uFocusDepth.value = focusDepth;
+  dofPass.uniforms.uFocusRange.value = focusRange;
+  dofPass.uniforms.uMaxBlur.value = maxBlur;
 
   renderer.setRenderTarget(renderTarget);
   renderer.render(scene, camera);
