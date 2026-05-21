@@ -92,9 +92,7 @@ function addJetParticle(jet) {
 (async () => {
   try {
     const loader = new THREE.TextureLoader();
-    const url = typeof textureSrc !== "undefined" && textureSrc[0] ? textureSrc[0] : "";
-    if (!url) throw new Error("texture.js が読み込めません");
-    texJet = await loader.loadAsync(url);
+    texJet = await loader.loadAsync(textureSrc[0]);
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);

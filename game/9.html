@@ -306,7 +306,6 @@ function syncShotModels() {
     rand = new MyRandom();
 
     const tl = new THREE.TextureLoader();
-    if (typeof textureSrc === "undefined" || textureSrc.length < 3) throw new Error("texture.js");
     texJet = await tl.loadAsync(textureSrc[0]);
     texBaku = await tl.loadAsync(textureSrc[1]);
     texShot = await tl.loadAsync(textureSrc[2]);
