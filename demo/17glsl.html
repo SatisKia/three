@@ -19,6 +19,8 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { setAnimationLoop } from "./common.js";
 
+const useDataUrl = false;
+
 const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 
 const canvas3d = document.getElementById("hoge_canvas");
@@ -123,7 +125,7 @@ const outputPass = new OutputPass();
 outputPass.renderToScreen = true; // OutputPassはキャンバスへ描画
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(img_src);
+const texture = loader.load(useDataUrl ? img_src : "texture/sample2.png");
 texture.colorSpace = THREE.SRGBColorSpace;
 texture.flipY = true;
 

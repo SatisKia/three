@@ -23,6 +23,8 @@ import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { setAnimationLoop } from "./common.js";
 
+const useDataUrl = false;
+
 const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 
 const canvas3d = document.getElementById("hoge_canvas");
@@ -59,7 +61,7 @@ composer.addPass(bokehPass);
 composer.addPass(new OutputPass()); // EffectComposerやRTT（Render To Texture、テクスチャへのレンダリング）経由だと中間バッファが線形のまま最後まで行き、画面に出る直前にsRGBに戻していないと、全体が一段暗く見えるため、チェーンの最後にOutputPassを足す
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(img_src);
+const texture = loader.load(useDataUrl ? img_src : "texture/sample2.png");
 texture.colorSpace = THREE.SRGBColorSpace;
 texture.flipY = true;
 
