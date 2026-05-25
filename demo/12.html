@@ -15,7 +15,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { applyDiffuse, applyDiffuseMapsFromDataUrls, applySmoothShading, convertMaterialsToBasic, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromUrls, applySmoothShading, convertMaterialsToBasic, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const useLight = false;
@@ -65,10 +65,10 @@ let meshRoot = null;
     } else {
       convertMaterialsToBasic(root);
     }
-    applyDiffuseMapsFromDataUrls(root, [
-      { materialName: "kao", dataUrl: img_src[0] },
-      { materialName: "body", dataUrl: img_src[1] },
-      { materialName: "fire", dataUrl: img_src[2] },
+    applyDiffuseMapsFromUrls(root, [
+      { materialName: "kao", url: img_src[0] },
+      { materialName: "body", url: img_src[1] },
+      { materialName: "fire", url: img_src[2] },
     ]);
     if (useLight) {
       applyDiffuse(root, new THREE.Color(0.8, 0.8, 0.8));

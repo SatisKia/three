@@ -34,6 +34,7 @@ function detectRuntime() {
   return "browser";
 }
 
+const useDataUrl = true;
 const drawHitFlag = false;
 
 const MODEL_DIR = "./model/";
@@ -155,6 +156,7 @@ let enemyRadius02 = 1.0;
 let score = 0;
 
 function addBaku(x, y, z) {
+  if (!texBaku) return;
   const vx = rand.next(50) / 50.0;
   const vy = rand.next(50) / 50.0;
   const vz = rand.next(50) / 50.0;
@@ -172,6 +174,7 @@ function addBaku(x, y, z) {
 }
 
 function addEnemyShot(x, y, z) {
+  if (!texShot) return;
   const vx = jiki.x() - x;
   const vy = jiki.y() - y;
   const vz = jiki.z() - z;
@@ -269,6 +272,7 @@ function setGroundTiles() {
 }
 
 function addJetParticle(jet) {
+  if (!texJet) return;
   const material = new THREE.SpriteMaterial({
     map: texJet,
     transparent: true,
@@ -307,9 +311,9 @@ function syncShotModels() {
     rand = new MyRandom();
 
     const tl = new THREE.TextureLoader();
-    texJet = await tl.loadAsync(textureSrc[0]);
-    texBaku = await tl.loadAsync(textureSrc[1]);
-    texShot = await tl.loadAsync(textureSrc[2]);
+    texJet = await tl.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texBaku = await tl.loadAsync(useDataUrl ? textureSrc[1] : "texture/baku.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texShot = await tl.loadAsync(useDataUrl ? textureSrc[2] : "texture/shot.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);

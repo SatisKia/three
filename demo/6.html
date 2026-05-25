@@ -15,6 +15,8 @@
 import * as THREE from "three";
 import { setAnimationLoop } from "./common.js";
 
+const useDataUrl = true;
+
 const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 
 const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
@@ -49,7 +51,7 @@ renderer.physicallyCorrectLights = false;
 const geom = new THREE.BoxGeometry(2.0, 2.0, 2.0);
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+const texture = loader.load(useDataUrl ? img_src : "texture/sample1.png");
 // d2jsはgl.texImage2DのRGBAをそのままtexture2Dし、シェーダ内で線形変換せず乗算している。Three.js既定（texture.colorSpace = SRGBColorSpace）だとサンプルが線形にデコードされ、コントラスト・彩度が強くなり赤みが増しやすい。寄せるにはテクスチャをNoColorSpaceにする。
 texture.colorSpace = THREE.SRGBColorSpace;
 texture.flipY = true; // THREE.BoxGeometryではtrueにしないと画像が反転する

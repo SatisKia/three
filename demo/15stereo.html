@@ -18,8 +18,10 @@
 <script type="module">
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
-import { applyDiffuse, applyDiffuseMapsFromDataUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
+
+const useDataUrlMesh = true;
 
 const MODEL_DIR = "./model/";
 
@@ -231,15 +233,15 @@ function renderStereo() {
       const root = await loadObjMtl(MODEL_DIR, s.name);
       convertMaterialsToLambert(root);
       if (s.name === "witch") {
-        applyDiffuseMapsFromDataUrls(root, [
-          { materialName: "kao", dataUrl: img_src[0] },
-          { materialName: "body", dataUrl: img_src[1] },
-          { materialName: "fire", dataUrl: img_src[2] },
+        applyDiffuseMapsFromUrls(root, [
+          { materialName: "kao", url: img_src[0] },
+          { materialName: "body", url: img_src[1] },
+          { materialName: "fire", url: img_src[2] },
         ]);
       }
       if (s.name === "mesh") {
-        applyDiffuseMapsFromDataUrls(root, [
-          { materialName: "mat1", dataUrl: img_src_mesh },
+        applyDiffuseMapsFromUrls(root, [
+          { materialName: "mat1", url: useDataUrlMesh ? img_src_mesh : "texture/mesh.png" },
         ]);
       }
       if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));

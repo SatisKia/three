@@ -82,20 +82,20 @@ export function convertMaterialsToBasic(root) {
   });
 }
 
-// MTLマテリアル名に対応する拡散テクスチャをdata URLで差し替える（convertMaterialsToLambert/convertMaterialsToBasicより後に実行）
-export function applyDiffuseMapsFromDataUrls(root, materialDataUrlByName) {
-  const dataUrlMap = {};
-  for (const entry of materialDataUrlByName) {
-    dataUrlMap[entry.materialName] = entry.dataUrl;
+// MTLマテリアル名に対応する拡散テクスチャを差し替える（convertMaterialsToLambert/convertMaterialsToBasicより後に実行）
+export function applyDiffuseMapsFromUrls(root, materialUrlByName) {
+  const urlMap = {};
+  for (const entry of materialUrlByName) {
+    urlMap[entry.materialName] = entry.url;
   }
-  if (!dataUrlMap) return;
+  if (!urlMap) return;
   const loader = new THREE.TextureLoader();
   root.traverse((obj) => {
     if (!obj.isMesh) return;
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const material of materials) {
       if (!material || !material.name) continue;
-      const url = dataUrlMap[material.name];
+      const url = urlMap[material.name];
       if (url == null || typeof url !== "string") continue;
       if (material.map) material.map.dispose();
       material.map = loader.load(url);

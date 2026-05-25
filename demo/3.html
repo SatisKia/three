@@ -15,6 +15,8 @@
 import * as THREE from "three";
 import { setAnimationLoop } from "./common.js";
 
+const useDataUrl = true;
+
 const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 
 const canvas3d = document.getElementById("hoge_canvas");
@@ -51,7 +53,7 @@ geom.setAttribute("uv", new THREE.BufferAttribute(textureCoordinates, 2));
 geom.setIndex([0, 1, 2, 1, 3, 2]);
 
 const loader = new THREE.TextureLoader();
-const texture = loader.load(typeof img_src !== "undefined" ? img_src : "");
+const texture = loader.load(useDataUrl ? img_src : "texture/sample1.png");
 texture.wrapS = THREE.ClampToEdgeWrapping;
 texture.wrapT = THREE.ClampToEdgeWrapping;
 texture.minFilter = THREE.LinearFilter;

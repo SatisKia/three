@@ -17,7 +17,7 @@
 <script type="module">
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
-import { applyDiffuse, applyDiffuseMapsFromDataUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -113,10 +113,10 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2jsç‰
       const root = await loadObjMtl(MODEL_DIR, s.name);
       convertMaterialsToLambert(root);
       if (s.name === "witch") {
-        applyDiffuseMapsFromDataUrls(root, [
-          { materialName: "kao", dataUrl: img_src[0] },
-          { materialName: "body", dataUrl: img_src[1] },
-          { materialName: "fire", dataUrl: img_src[2] },
+        applyDiffuseMapsFromUrls(root, [
+          { materialName: "kao", url: img_src[0] },
+          { materialName: "body", url: img_src[1] },
+          { materialName: "fire", url: img_src[2] },
         ]);
       }
       if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));
