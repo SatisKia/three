@@ -207,7 +207,7 @@ function addEnemy02(flag) {
 }
 
 function setGroundTiles() {
-  if (!groundTemplate) return; // init の load 完了前はアニメループが先に回る（キャッシュ空時に顕在化）
+  if (!groundTemplate) return; // initのload完了前はアニメループが先に回る
   const gx = Math.floor(jiki.x() / GROUND_SIZE) * GROUND_SIZE;
   const gz = Math.floor(jiki.z() / GROUND_SIZE) * GROUND_SIZE;
   let i = 0;

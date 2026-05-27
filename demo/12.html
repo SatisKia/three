@@ -7,9 +7,9 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
   }
 }
 </script>
@@ -46,9 +46,9 @@ camera.lookAt(0.0, 2.5, 0.0);
 
 if (useLight) {
   const amb = new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-  const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-  dir.position.set(0.85, 0.8, 0.75);
-  scene.add(amb, dir);
+  const light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+  light.position.set(0.85, 0.8, 0.75);
+  scene.add(amb, light);
 }
 
 let rotateX = 0.0;

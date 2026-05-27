@@ -176,21 +176,21 @@ water.receiveShadow = true;
 scenePivot.add(reflector);
 scenePivot.add(water);
 
-const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.layers.enable(1); // 水面はレイヤ1。影の投射・受光の対象に含める
-dir.castShadow = true;
-dir.shadow.mapSize.set(2048, 2048);
-dir.shadow.camera.near = 0.5;
-dir.shadow.camera.far = 40.0;
+const light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+light.layers.enable(1); // 水面はレイヤ1。影の投射・受光の対象に含める
+light.castShadow = true;
+light.shadow.mapSize.set(2048, 2048);
+light.shadow.camera.near = 0.5;
+light.shadow.camera.far = 40.0;
 const shadowExtent = 12.0 * (GROUND_PLANE_SIZE / 20.0);
-dir.shadow.camera.left = -shadowExtent;
-dir.shadow.camera.right = shadowExtent;
-dir.shadow.camera.top = shadowExtent;
-dir.shadow.camera.bottom = -shadowExtent;
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
-scene.add(dir);
-scene.add(dir.target);
+light.shadow.camera.left = -shadowExtent;
+light.shadow.camera.right = shadowExtent;
+light.shadow.camera.top = shadowExtent;
+light.shadow.camera.bottom = -shadowExtent;
+light.position.set(lightX, lightY, lightZ);
+light.target.position.set(0.0, lookY, 0.0);
+scene.add(light);
+scene.add(light.target);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
 
 (async () => {
@@ -290,9 +290,9 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
     .sub(worldPivot)
     .applyMatrix4(pivotRot)
     .add(worldPivot);
-  dir.position.copy(transLight);
-  dir.target.position.set(0.0, lookY, 0.0);
-  dir.target.updateMatrixWorld();
+  light.position.copy(transLight);
+  light.target.position.set(0.0, lookY, 0.0);
+  light.target.updateMatrixWorld();
 
   camera.lookAt(0.0, lookY, 0.0);
   renderer.render(scene, camera);

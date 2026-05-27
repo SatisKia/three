@@ -7,9 +7,9 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
   }
 }
 </script>
@@ -61,7 +61,7 @@ let texJet = null;
 let elapse = 0;
 
 function setGroundTiles() {
-  if (!groundTemplate) return; // init の load 完了前はアニメループが先に回る（キャッシュ空時に顕在化）
+  if (!groundTemplate) return; // initのload完了前はアニメループが先に回る
   const gx = Math.floor(jiki.x() / GROUND_SIZE) * GROUND_SIZE;
   const gz = Math.floor(jiki.z() / GROUND_SIZE) * GROUND_SIZE;
   let i = 0;

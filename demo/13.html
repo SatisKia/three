@@ -7,9 +7,9 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/MTLLoader.js"
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
   }
 }
 </script>
@@ -18,13 +18,29 @@ import * as THREE from "three";
 import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { setAnimationLoop } from "./common.js";
 
+const useDirectionalLight = true;
+const usePointLight = false;
+const useSpotLight = false;
+
 const useWireframe = false;
 const WIREFRAME_GRAY = 0.5;
 
 const MODEL_DIR = "./model/";
 
 const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
+// DirectionalLight
 const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+// PointLight
+const POINT_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+const POINT_LIGHT_DISTANCE = 25.0; // 光の最大到達距離（影のfarにも反映される）
+const POINT_LIGHT_DECAY = 0.01;
+const POINT_LIGHT_SHADOW_RADIUS = 4.0; // 影のぼかし（1=既定、大きいほどソフト、解像度低下に注意）
+// SpotLight
+const SPOT_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+const SPOT_LIGHT_DISTANCE = 25.0;
+const SPOT_LIGHT_DECAY = 0.01;
+const SPOT_LIGHT_ANGLE = Math.PI / 6.0; // 半開角30deg→影カメラFOV60deg（d2js版のシャドウマップと同じ）
+const SPOT_LIGHT_PENUMBRA = 0.2;
 
 let image_loaded = false;
 
@@ -44,6 +60,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
+// Percentage-Closer Filtering（パーセンテージ・クローザー・フィルタリング）を使用。シャドウマップで「そのピクセルは影の中か」を判定するとき、1点だけではなく周辺の深度を複数サンプルし、影に入っている割合（パーセンテージ）で明暗を決める手法。
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 既定値：PCFShadowMap
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -62,19 +79,47 @@ const LIGHT_STEP = 0.1;
 let rotateX = 20.0;
 let rotateY = 20.0;
 
-const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.castShadow = true;
-dir.shadow.mapSize.set(2048, 2048);
-dir.shadow.camera.near = 0.5;
-dir.shadow.camera.far = 40.0;
-dir.shadow.camera.left = -10.0;
-dir.shadow.camera.right = 10.0;
-dir.shadow.camera.top = 10.0;
-dir.shadow.camera.bottom = -10.0;
-dir.position.set(lightX, lightY, lightZ);
-dir.target.position.set(0.0, lookY, 0.0);
-scene.add(dir);
-scene.add(dir.target);
+const light;
+if (useDirectionalLight) {
+  light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = 40.0;
+  light.shadow.camera.left = -10.0;
+  light.shadow.camera.right = 10.0;
+  light.shadow.camera.top = 10.0;
+  light.shadow.camera.bottom = -10.0;
+  light.position.set(lightX, lightY, lightZ);
+  light.target.position.set(0.0, lookY, 0.0);
+  scene.add(light);
+  scene.add(light.target);
+}
+if (usePointLight) {
+  light = new THREE.PointLight(0xffffff, 1.0 * POINT_LIGHT_COEF, POINT_LIGHT_DISTANCE, POINT_LIGHT_DECAY);
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = POINT_LIGHT_DISTANCE;
+  light.shadow.bias = -0.0001;
+  light.shadow.normalBias = 0.02;
+  light.shadow.radius = POINT_LIGHT_SHADOW_RADIUS;
+  light.position.set(lightX, lightY, lightZ);
+  scene.add(light);
+}
+if (useSpotLight) {
+  light = new THREE.SpotLight(0xffffff, 1.0 * SPOT_LIGHT_COEF, SPOT_LIGHT_DISTANCE, SPOT_LIGHT_ANGLE, SPOT_LIGHT_PENUMBRA, SPOT_LIGHT_DECAY);
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = SPOT_LIGHT_DISTANCE;
+  light.shadow.bias = -0.0001;
+  light.shadow.normalBias = 0.02;
+  light.position.set(lightX, lightY, lightZ);
+  light.target.position.set(0.0, lookY, 0.0);
+  scene.add(light);
+  scene.add(light.target);
+}
 scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
 
 const keys = new Set();
@@ -154,9 +199,11 @@ setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100
     .sub(worldPivot)
     .applyMatrix4(pivotRot)
     .add(worldPivot);
-  dir.position.copy(transLight);
-  dir.target.position.set(0.0, lookY, 0.0);
-  dir.target.updateMatrixWorld();
+  light.position.copy(transLight);
+  if (useDirectionalLight || useSpotLight) {
+    light.target.position.set(0.0, lookY, 0.0);
+    light.target.updateMatrixWorld();
+  }
 
   camera.lookAt(0.0, lookY, 0.0);
   renderer.render(scene, camera);
