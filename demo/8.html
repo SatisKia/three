@@ -81,9 +81,9 @@ model.rotation.set(
 scene.add(model);
 
 const amb = new THREE.AmbientLight(0xffffff, 1.0 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-const dir = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.target.position.set(0.0, 0.0, 0.0);
-scene.add(amb, dir, dir.target);
+const light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+light.target.position.set(0.0, 0.0, 0.0);
+scene.add(amb, light, light.target);
 
 function applyMaterial() {
   const data = MATERIAL_DATA[materialIndex];
@@ -98,7 +98,7 @@ function applyMaterial() {
 applyMaterial();
 
 function setLight() {
-  dir.position.set(lightPosX, lightPosY, lightPosZ);
+  light.position.set(lightPosX, lightPosY, lightPosZ);
 }
 setLight();
 

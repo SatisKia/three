@@ -41,9 +41,9 @@ renderer.toneMapping = THREE.NoToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
-dir.position.set(-0.85, 0.8, -0.75);
-scene.add(amb, dir);
+const light = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+light.position.set(-0.85, 0.8, -0.75);
+scene.add(amb, light);
 
 (async () => {
   try {

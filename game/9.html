@@ -108,10 +108,10 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const amb = new THREE.AmbientLight(0xffffff, 0.6 * AMBIENT_LIGHT_COEF * SHADOW_AMBIENT_MULT);
-const dir = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF * SHADOW_DIRECTIONAL_MULT);
-dir.castShadow = true;
-dir.shadow.mapSize.set(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
-const shadowCam = dir.shadow.camera;
+const light = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF * SHADOW_DIRECTIONAL_MULT);
+light.castShadow = true;
+light.shadow.mapSize.set(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+const shadowCam = light.shadow.camera;
 const shadowOrthoRight = SHADOW_ORTHO_TOP * (SHADOW_MAP_WIDTH / SHADOW_MAP_HEIGHT);
 shadowCam.left = -shadowOrthoRight;
 shadowCam.right = shadowOrthoRight;
@@ -120,10 +120,10 @@ shadowCam.bottom = -SHADOW_ORTHO_TOP;
 shadowCam.near = 0.1;
 shadowCam.far = 1000.0;
 shadowCam.updateProjectionMatrix();
-dir.shadow.bias = -0.0002;
-dir.shadow.normalBias = 0.03;
-scene.add(amb, dir);
-scene.add(dir.target);
+light.shadow.bias = -0.0002;
+light.shadow.normalBias = 0.03;
+scene.add(amb, light);
+scene.add(light.target);
 
 const keys = {};
 window.addEventListener("keydown", (e) => { keys[e.code] = true; });
@@ -505,12 +505,12 @@ setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   camera.position.set(camera_x, camera_y, camera_z);
   camera.lookAt(look_x, look_y, look_z);
 
-  dir.position.set(
+  light.position.set(
     look_x - 0.85 * LIGHT_OFFSET_SCALE,
     look_y + 0.8  * LIGHT_OFFSET_SCALE,
     look_z - 0.75 * LIGHT_OFFSET_SCALE
   );
-  dir.target.position.set(look_x, look_y, look_z);
+  light.target.position.set(look_x, look_y, look_z);
 
   renderer.render(scene, camera);
 
