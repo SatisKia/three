@@ -1,4 +1,4 @@
-export function setAnimationLoop(renderer, frameInterval, frameFunc) {
+export function mySetAnimationLoop(renderer, frameInterval, frameFunc) {
   let accumulation = 0;
   let lastTick = performance.now();
   const getInterval = typeof frameInterval === "function" ? frameInterval : () => frameInterval;

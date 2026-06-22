@@ -18,7 +18,7 @@
 import * as THREE from "three";
 import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 function detectRuntime() {
   // NW.js上で動作しているかの判定
@@ -311,9 +311,9 @@ function syncShotModels() {
     rand = new MyRandom();
 
     const tl = new THREE.TextureLoader();
-    texJet = await tl.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texBaku = await tl.loadAsync(useDataUrl ? textureSrc[1] : "texture/baku.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texShot = await tl.loadAsync(useDataUrl ? textureSrc[2] : "texture/shot.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texJet = await tl.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texBaku = await tl.loadAsync(useDataUrl ? textureSrc[1] : "texture/baku.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texShot = await tl.loadAsync(useDataUrl ? textureSrc[2] : "texture/shot.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);
@@ -360,7 +360,7 @@ function syncShotModels() {
   }
 })();
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   elapse++;
 
   jiki.update(

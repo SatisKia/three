@@ -17,7 +17,7 @@
 import * as THREE from "three";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -150,7 +150,7 @@ const keys = new Set();
 window.addEventListener("keydown", (e) => keys.add(e.code));
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   if (keys.has("ArrowUp")) focusDepth += 0.01;
   if (keys.has("ArrowDown")) focusDepth -= 0.01;
   if (keys.has("ArrowLeft")) focusRange -= 0.01;

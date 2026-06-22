@@ -13,7 +13,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -58,7 +58,7 @@ scene.add(model);
 let scroll = 0.0;
 let old_time = performance.now();
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, (now) => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, (now) => {
   const time = now - old_time;
   old_time = now;
 

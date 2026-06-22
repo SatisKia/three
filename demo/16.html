@@ -13,7 +13,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -55,7 +55,7 @@ const camera_x = 0.0;
 const camera_y = 3.0;
 const camera_z = 6.0;
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   angle += 0.01;
   const rotX = camera_x * Math.cos(angle) - camera_z * Math.sin(angle);
   const rotZ = camera_z * Math.cos(angle) + camera_x * Math.sin(angle);

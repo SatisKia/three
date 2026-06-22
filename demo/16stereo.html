@@ -13,7 +13,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -86,7 +86,7 @@ function renderStereo() {
   renderer.setViewport(0, 0, size.width, size.height);
 }
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   angle += 0.01;
   const rotX = camera_x * Math.cos(angle) - camera_z * Math.sin(angle);
   const rotZ = camera_z * Math.cos(angle) + camera_x * Math.sin(angle);

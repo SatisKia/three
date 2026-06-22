@@ -16,7 +16,7 @@
 <script type="module">
 import * as THREE from "three";
 import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDirectionalLight = true;
 const usePointLight = false;
@@ -179,7 +179,7 @@ window.addEventListener("keyup", (e) => keys.delete(e.code));
   }
 })();
 
-setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
+mySetAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (keys.has("ArrowUp")) lightY += LIGHT_STEP;
   if (keys.has("ArrowDown")) lightY -= LIGHT_STEP;
   if (keys.has("ArrowLeft")) lightX -= LIGHT_STEP;

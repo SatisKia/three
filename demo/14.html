@@ -18,7 +18,7 @@
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
 import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
 
@@ -139,7 +139,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js�
   }
 })();
 
-setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
+mySetAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (keys.has("ArrowUp")) lightY += LIGHT_STEP;
   if (keys.has("ArrowDown")) lightY -= LIGHT_STEP;
   if (keys.has("ArrowLeft")) lightX -= LIGHT_STEP;

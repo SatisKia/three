@@ -13,7 +13,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -79,7 +79,7 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   hide2DFlag = keys.has("ShiftLeft") || keys.has("ShiftRight");
 
   angle += 0.01;

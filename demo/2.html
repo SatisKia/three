@@ -12,7 +12,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useIndex = true;
 
@@ -87,7 +87,7 @@ model.rotation.set(
 );
 scene.add(model);
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   renderer.render(scene, camera);
 
   // 2Dグラフィック画面の描画

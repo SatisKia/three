@@ -13,7 +13,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -57,7 +57,7 @@ pos.forEach(([x, y, z]) => {
 });
 scene.add(group);
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   group.children.forEach((spr) => spr.lookAt(camera.position));
   renderer.render(scene, camera);
 

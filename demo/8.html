@@ -12,7 +12,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const FRAME_INTERVAL_MS = 1000 / 30/*フレーム*/;
 
@@ -106,7 +106,7 @@ const keys = new Set();
 window.addEventListener("keydown", (e) => keys.add(e.code));
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   if (keys.has("ArrowUp")) lightPosY += 0.1;
   if (keys.has("ArrowDown")) lightPosY -= 0.1;
   if (keys.has("ArrowLeft")) lightPosX -= 0.1;

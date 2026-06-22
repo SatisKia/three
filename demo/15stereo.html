@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
 import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrlMesh = false;
 
@@ -267,7 +267,7 @@ function renderStereo() {
 })();
 
 let elapse = 0;
-setAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
+mySetAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
   if (keys.has("ArrowUp")) lightY += LIGHT_STEP;
   if (keys.has("ArrowDown")) lightY -= LIGHT_STEP;
   if (keys.has("ArrowLeft")) lightX -= LIGHT_STEP;

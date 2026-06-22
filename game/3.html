@@ -15,7 +15,7 @@
 <script type="module">
 import * as THREE from "three";
 import { applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
 
@@ -65,7 +65,7 @@ scene.add(amb, light);
   }
 })();
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   const camera_vx = 0.0;
   const camera_vy = 0.0;
   const camera_vz = 10.0;

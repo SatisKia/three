@@ -17,7 +17,7 @@
 import * as THREE from "three";
 import { applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { _DIV, _MOD, GROUND_SIZE, Jiki, JikiJet, WAIT_1 } from "./gameCommon.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const useDataUrl = false;
 
@@ -95,7 +95,7 @@ function addJetParticle(jet) {
 (async () => {
   try {
     const loader = new THREE.TextureLoader();
-    texJet = await loader.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // setAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texJet = await loader.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);
@@ -114,7 +114,7 @@ function addJetParticle(jet) {
   }
 })();
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   elapse++;
 
   jiki.update(

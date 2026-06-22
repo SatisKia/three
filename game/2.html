@@ -12,7 +12,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const WAIT_1 = 60/*フレーム*/;
 const FRAME_INTERVAL_MS = 1000 / WAIT_1;
@@ -39,7 +39,7 @@ const light = new THREE.DirectionalLight(0xffffff, 0.5 * DIRECTIONAL_LIGHT_COEF)
 light.position.set(-0.85, 0.8, -0.75);
 scene.add(amb, light);
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   const camera_vx = 0.0;
   const camera_vy = 0.0;
   const camera_vz = 10.0;

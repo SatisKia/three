@@ -16,7 +16,7 @@
 import * as THREE from "three";
 import { applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { GROUND_SIZE, Jiki, WAIT_1 } from "./gameCommon.js";
-import { setAnimationLoop } from "./common.js";
+import { mySetAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
 
@@ -92,7 +92,7 @@ function setGroundTiles() {
   }
 })();
 
-setAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   jiki.update(
     !!keys.ArrowUp,
     !!keys.ArrowDown,
