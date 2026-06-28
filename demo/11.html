@@ -133,10 +133,13 @@ mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
       cctx.drawImage(canvas2d, 0, 0, canvas2d.width, canvas2d.height, 0, 0, w, h);
     }
     const dataUrl = composite.toDataURL("image/png");
-    const a = document.createElement("a");
+    let a = document.createElement("a");
     a.href = dataUrl;
     a.download = "screenshot.png";
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    a = null;
   }
 });
 </script>

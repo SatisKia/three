@@ -79,7 +79,7 @@ const LIGHT_STEP = 0.1;
 let rotateX = 20.0;
 let rotateY = 20.0;
 
-const light;
+let light;
 if (useDirectionalLight) {
   light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
   light.castShadow = true;
