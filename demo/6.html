@@ -28,7 +28,7 @@ const DIFFUSE_BLEND = 0.5;
 const canvas3d = document.getElementById("hoge_canvas");
 const canvas2d = document.getElementById("fuga_canvas");
 
-const useGouraud = true;
+const useSmooth = true;
 const diffuse = new THREE.Color(1.0, 0.0, 1.0);
 const useEmission = false;
 const emissionColor = new THREE.Color(1.0, 0.0, 1.0);
@@ -65,7 +65,7 @@ const material = new THREE.MeshPhongMaterial({
   shininess: 50.0,
   emissive: emissionColor,
   emissiveIntensity: useEmission ? emissionIntensity : 0.0,
-  flatShading: useGouraud,
+  flatShading: !useSmooth,
 });
 
 const model = new THREE.Mesh(geom, material);

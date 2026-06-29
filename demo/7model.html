@@ -27,6 +27,8 @@ const DIRECTIONAL_LIGHT_COEF = 3.5; // d2js版と見た目が同じになるよ�
 const canvas3d = document.getElementById("hoge_canvas");
 const canvas2d = document.getElementById("fuga_canvas");
 
+const useSmooth = true;
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0000ff);
 
@@ -45,7 +47,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
     const model = await loadObjMtl(MODEL_DIR, "sphere");
     applyDiffuse(model, 0xffffff); // MeshPhongMaterialのcolorに相当
     applyPhongSpecular(model, new THREE.Color(0.5, 0.5, 0.5), 50.0); // MeshPhongMaterialのspecular/shininessに相当
-    applySmoothShading(model);
+    if (useSmooth) {
+      applySmoothShading(model);
+    }
     model.scale.setScalar(0.015);
     model.position.set(0.0, 0.0, -3.0);
     model.rotation.set(
