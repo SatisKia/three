@@ -497,6 +497,7 @@ export class Enemy02 {
     this._step = 0;
     this._jikiRef = jikiRef;
     this._onEnemyShot = onEnemyShot;
+
     const dir = new THREE.Vector3(-this._vx, 0.0, -this._vz);
     if (dir.lengthSq() < 1e-12) dir.set(0.0, 0.0, 1.0);
     else dir.normalize();
