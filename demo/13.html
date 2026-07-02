@@ -39,8 +39,9 @@ const POINT_LIGHT_SHADOW_RADIUS = 4.0; // 影のぼかし（1=既定、大きい
 const SPOT_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
 const SPOT_LIGHT_DISTANCE = 25.0;
 const SPOT_LIGHT_DECAY = 0.01;
-const SPOT_LIGHT_ANGLE = Math.PI / 6.0; // 半開角30deg→影カメラFOV60deg（d2js版のシャドウマップと同じ）
-const SPOT_LIGHT_PENUMBRA = 0.2;
+const SPOT_LIGHT_ANGLE = Math.PI / 12.0; // Three.jsでは半開角。つまり15deg×2となり、影カメラFOV30deg
+const SPOT_LIGHT_PENUMBRA = 0.2; // 光円の境界ぼかし（0=くっきり、1=最大限ぼかす）
+const SPOT_LIGHT_SHADOW_RADIUS = 1.0; // 影のぼかし（PCFSoftShadowMap、1=既定、大きいほどソフト）
 
 let image_loaded = false;
 
@@ -91,7 +92,7 @@ if (useDirectionalLight) {
   light.shadow.camera.top = 10.0;
   light.shadow.camera.bottom = -10.0;
   light.position.set(lightX, lightY, lightZ);
-  light.target.position.set(0.0, lookY, 0.0);
+  light.target.position.set(0.0, lookY, 0.0); // 初期方向は仮（後で毎フレームtarget方向に合わせる）
   scene.add(light);
   scene.add(light.target);
 }
@@ -115,8 +116,9 @@ if (useSpotLight) {
   light.shadow.camera.far = SPOT_LIGHT_DISTANCE;
   light.shadow.bias = -0.0001;
   light.shadow.normalBias = 0.02;
+  light.shadow.radius = SPOT_LIGHT_SHADOW_RADIUS;
   light.position.set(lightX, lightY, lightZ);
-  light.target.position.set(0.0, lookY, 0.0);
+  light.target.position.set(0.0, lookY, 0.0); // 初期方向は仮（後で毎フレームtarget方向に合わせる）
   scene.add(light);
   scene.add(light.target);
 }
