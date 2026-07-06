@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <title></title>
-<script src="texture.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -19,7 +18,6 @@ import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambe
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
 
-const useDataUrl = false;
 const drawHitFlag = false;
 
 const MODEL_DIR = "./model/";
@@ -263,10 +261,10 @@ function syncShotModels() {
   try {
     rand = new MyRandom();
 
-    const tl = new THREE.TextureLoader();
-    texJet = await tl.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texBaku = await tl.loadAsync(useDataUrl ? textureSrc[1] : "texture/baku.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texShot = await tl.loadAsync(useDataUrl ? textureSrc[2] : "texture/shot.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    const loader = new THREE.TextureLoader();
+    texJet = await loader.loadAsync("texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texBaku = await loader.loadAsync("texture/baku.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texShot = await loader.loadAsync("texture/shot.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);

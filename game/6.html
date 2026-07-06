@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <title></title>
-<script src="texture.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -18,8 +17,6 @@ import * as THREE from "three";
 import { applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { _DIV, _MOD, GROUND_SIZE, Jiki, JikiJet, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
-
-const useDataUrl = false;
 
 const MODEL_DIR = "./model/";
 
@@ -95,7 +92,7 @@ function addJetParticle(jet) {
 (async () => {
   try {
     const loader = new THREE.TextureLoader();
-    texJet = await loader.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texJet = await loader.loadAsync("texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);

@@ -4,7 +4,6 @@
 <meta charset="utf-8" />
 <title></title>
 <script src="api.js"></script>
-<script src="texture.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -34,7 +33,6 @@ function detectRuntime() {
   return "browser";
 }
 
-const useDataUrl = false;
 const drawHitFlag = false;
 
 const MODEL_DIR = "./model/";
@@ -310,10 +308,10 @@ function syncShotModels() {
   try {
     rand = new MyRandom();
 
-    const tl = new THREE.TextureLoader();
-    texJet = await tl.loadAsync(useDataUrl ? textureSrc[0] : "texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texBaku = await tl.loadAsync(useDataUrl ? textureSrc[1] : "texture/baku.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
-    texShot = await tl.loadAsync(useDataUrl ? textureSrc[2] : "texture/shot.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    const loader = new THREE.TextureLoader();
+    texJet = await loader.loadAsync("texture/jet.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texBaku = await loader.loadAsync("texture/baku.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
+    texShot = await loader.loadAsync("texture/shot.png"); // mySetAnimationLoop内でnullチェックしているので、初期化時はloadAsyncを使う
 
     groundTemplate = await loadObjMtl(MODEL_DIR, "ground");
     convertMaterialsToLambert(groundTemplate);
