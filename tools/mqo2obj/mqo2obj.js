@@ -312,7 +312,7 @@ function writeMtl(filePath, mats) {
     lines.push(`newmtl ${mat.name}`);
     lines.push(`Ka ${(mat.amb * mat.col[0]).toFixed(5)} ${(mat.amb * mat.col[1]).toFixed(5)} ${(mat.amb * mat.col[2]).toFixed(5)}`);
     lines.push(`Kd ${(mat.dif * mat.col[0]).toFixed(5)} ${(mat.dif * mat.col[1]).toFixed(5)} ${(mat.dif * mat.col[2]).toFixed(5)}`);
-    lines.push(`Ks ${(mat.spc * mat.col[0]).toFixed(5)} ${(mat.spc * mat.col[1]).toFixed(5)} ${(mat.spc * mat.col[2]).toFixed(5)}`);
+    lines.push(`Ks ${mat.spc.toFixed(5)} ${mat.spc.toFixed(5)} ${mat.spc.toFixed(5)}`);
     lines.push(`Ns ${mat.power.toFixed(5)}`);
     if (mat.has_tex) {
       lines.push(`map_Kd ${mat.tex}`);

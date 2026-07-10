@@ -490,9 +490,9 @@ static int write_mtl(const char* path, Material* mats, int mat_num) {
 			mats[i].dif * mats[i].col[1],
 			mats[i].dif * mats[i].col[2]);
 		fprintf(fp, "Ks %.5f %.5f %.5f\n",
-			mats[i].spc * mats[i].col[0],
-			mats[i].spc * mats[i].col[1],
-			mats[i].spc * mats[i].col[2]);
+			mats[i].spc,
+			mats[i].spc,
+			mats[i].spc);
 		fprintf(fp, "Ns %.5f\n", mats[i].power);
 		if ( mats[i].has_tex ) {
 			fprintf(fp, "map_Kd %s\n", mats[i].tex);
