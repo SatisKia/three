@@ -432,6 +432,9 @@ static Vec3 compute_face_normal(const Object* obj, const Face* face) {
 		n.z += (v0->x - v1->x) * (v0->y + v1->y);
 	}
 	vec3_normalize(&n);
+	n.x = -n.x;
+	n.y = -n.y;
+	n.z = -n.z;
 	return n;
 }
 static Vec3* compute_vertex_normals(const Object* obj) {
@@ -649,7 +652,7 @@ int main(int argc, char* argv[]) {
 			}
 
 			if ( face->has_uv ) {
-				for ( j = 0; j < face->v_num; j++ ) {
+				for ( j = face->v_num - 1; j >= 0; j-- ) {
 					float u = face->uv[j * 2];
 					float v = face->uv[j * 2 + 1];
 					fprintf(obj_fp, "vt %.5f %.5f\n", u, 1.0f - v);
@@ -657,9 +660,9 @@ int main(int argc, char* argv[]) {
 				}
 
 				fprintf(obj_fp, "f");
-				for ( j = 0; j < face->v_num; j++ ) {
+				for ( j = face->v_num - 1; j >= 0; j-- ) {
 					int v_idx = face->v[j] + 1 + vertex_offset;
-					int vt_idx = vt_count - face->v_num + j + 1;
+					int vt_idx = vt_count - face->v_num + (face->v_num - 1 - j) + 1;
 					if ( export_normals ) {
 						fprintf(obj_fp, " %d/%d/%d", v_idx, vt_idx, v_idx);
 					} else {
@@ -669,7 +672,7 @@ int main(int argc, char* argv[]) {
 				fprintf(obj_fp, "\n");
 			} else {
 				fprintf(obj_fp, "f");
-				for ( j = 0; j < face->v_num; j++ ) {
+				for ( j = face->v_num - 1; j >= 0; j-- ) {
 					int v_idx = face->v[j] + 1 + vertex_offset;
 					if ( export_normals ) {
 						fprintf(obj_fp, " %d//%d", v_idx, v_idx);

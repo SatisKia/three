@@ -272,6 +272,9 @@ function computeFaceNormal(verts, face) {
     n.y /= len;
     n.z /= len;
   }
+  n.x = -n.x;
+  n.y = -n.y;
+  n.z = -n.z;
   return n;
 }
 function computeVertexNormals(obj) {
@@ -379,7 +382,7 @@ function convertMqoToObj(inPath, outObjPath, options = {}) {
       }
 
       if (face.has_uv) {
-        for (let j = 0; j < face.v_num; j++) {
+        for (let j = face.v_num - 1; j >= 0; j--) {
           const u = face.uv[j * 2];
           const v = face.uv[j * 2 + 1];
           objLines.push(`vt ${u.toFixed(5)} ${(1.0 - v).toFixed(5)}`);
@@ -387,15 +390,15 @@ function convertMqoToObj(inPath, outObjPath, options = {}) {
         }
 
         let faceLine = 'f';
-        for (let j = 0; j < face.v_num; j++) {
+        for (let j = face.v_num - 1; j >= 0; j--) {
           const vIdx = face.v[j] + 1 + vertexOffset;
-          const vtIdx = vtCount - face.v_num + j + 1;
+          const vtIdx = vtCount - face.v_num + (face.v_num - 1 - j) + 1;
           faceLine += exportNormals ? ` ${vIdx}/${vtIdx}/${vIdx}` : ` ${vIdx}/${vtIdx}`;
         }
         objLines.push(faceLine);
       } else {
         let faceLine = 'f';
-        for (let j = 0; j < face.v_num; j++) {
+        for (let j = face.v_num - 1; j >= 0; j--) {
           const vIdx = face.v[j] + 1 + vertexOffset;
           faceLine += exportNormals ? ` ${vIdx}//${vIdx}` : ` ${vIdx}`;
         }
