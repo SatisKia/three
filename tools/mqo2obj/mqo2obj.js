@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const DEFAULT_MAT = -1;
+
 const EOL = process.platform === 'win32' ? '\r\n' : '\n';
 
 function createCursor(text, pos = 0) {
@@ -319,6 +321,12 @@ function writeMtl(filePath, mats) {
     }
     lines.push('');
   }
+  lines.push('newmtl default');
+  lines.push('Ka 0.60000 0.60000 0.60000');
+  lines.push('Kd 0.80000 0.80000 0.80000');
+  lines.push('Ks 0.00000 0.00000 0.00000');
+  lines.push('Ns 5.00000');
+  lines.push('');
   fs.writeFileSync(filePath, lines.join(EOL), 'latin1');
 }
 
@@ -372,13 +380,16 @@ function convertMqoToObj(inPath, outObjPath, options = {}) {
     }
 
     for (const face of obj.faces) {
-      const mat = face.mat >= 0 && face.mat < mats.length ? mats[face.mat] : null;
+      const effectiveMat =
+        face.mat >= 0 && face.mat < mats.length ? face.mat : DEFAULT_MAT;
 
-      if (face.mat !== lastMat) {
-        if (mat) {
-          objLines.push(`usemtl ${mat.name}`);
+      if (effectiveMat !== lastMat) {
+        if (effectiveMat === DEFAULT_MAT) {
+          objLines.push('usemtl default');
+        } else {
+          objLines.push(`usemtl ${mats[effectiveMat].name}`);
         }
-        lastMat = face.mat;
+        lastMat = effectiveMat;
       }
 
       if (face.has_uv) {

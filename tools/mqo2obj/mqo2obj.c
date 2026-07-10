@@ -6,6 +6,7 @@
 #define MAX_LINE 4096
 #define MAX_NAME 256
 #define MAX_PATH 512
+#define DEFAULT_MAT -1
 
 typedef struct {
 	char name[MAX_NAME];
@@ -500,6 +501,13 @@ static int write_mtl(const char* path, Material* mats, int mat_num) {
 		fprintf(fp, "\n");
 	}
 
+	fprintf(fp, "newmtl default\n");
+	fprintf(fp, "Ka 0.60000 0.60000 0.60000\n");
+	fprintf(fp, "Kd 0.80000 0.80000 0.80000\n");
+	fprintf(fp, "Ks 0.00000 0.00000 0.00000\n");
+	fprintf(fp, "Ns 5.00000\n");
+	fprintf(fp, "\n");
+
 	fclose(fp);
 	return 1;
 }
@@ -636,19 +644,21 @@ int main(int argc, char* argv[]) {
 
 		for ( i = 0; i < obj.face_num; i++ ) {
 			Face* face = &obj.faces[i];
-			const Material* mat;
+			int effective_mat;
 
 			if ( face->mat < 0 || face->mat >= mat_num ) {
-				mat = NULL;
+				effective_mat = DEFAULT_MAT;
 			} else {
-				mat = &mats[face->mat];
+				effective_mat = face->mat;
 			}
 
-			if ( face->mat != last_mat ) {
-				if ( mat ) {
-					fprintf(obj_fp, "usemtl %s\n", mat->name);
+			if ( effective_mat != last_mat ) {
+				if ( effective_mat == DEFAULT_MAT ) {
+					fprintf(obj_fp, "usemtl default\n");
+				} else {
+					fprintf(obj_fp, "usemtl %s\n", mats[effective_mat].name);
 				}
-				last_mat = face->mat;
+				last_mat = effective_mat;
 			}
 
 			if ( face->has_uv ) {
