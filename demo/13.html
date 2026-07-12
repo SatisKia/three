@@ -8,12 +8,18 @@
   "imports": {
     "three": "./node_modules/three/build/three.module.js",
     "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js",
+    "three/addons/lines/LineMaterial.js": "./node_modules/three/examples/jsm/lines/LineMaterial.js",
+    "three/addons/lines/LineSegments2.js": "./node_modules/three/examples/jsm/lines/LineSegments2.js",
+    "three/addons/lines/LineSegmentsGeometry.js": "./node_modules/three/examples/jsm/lines/LineSegmentsGeometry.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from "three";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { mySetAnimationLoop } from "./common.js";
 
@@ -22,7 +28,102 @@ const usePointLight = false;
 const useSpotLight = false;
 
 const useWireframe = false;
-const WIREFRAME_GRAY = 0.5;
+const useWireframeMaterial = false;
+const WIREFRAME_GRAY = 0.5; // useWireframeMaterial=true時の単色
+const useWireframeBasic = false; // true: LineBasicMaterial+LineSegments / false: LineMaterial+LineSegments2
+const useDistance = false; // useWireframeがtrueの時のみ参照される（true=カメラ距離、false=ビュー深度）
+const WIREFRAME_LINE_WIDTH = 1.0; // CSSピクセル単位（useWireframeBasic=true時は無効）
+const useWireframeGradient = false; // d2js版と同様にnear/farでグラデーション
+// d2js版と同じsRGB値（mixはこの空間で行い、Three.js内部ではリニアに変換して渡す）
+const WIREFRAME_NEAR_SRGB = [1.0, 1.0, 1.0];
+const WIREFRAME_FAR_SRGB = [0.5, 0.5, 1.0];
+const WIREFRAME_NEAR_COLOR = new THREE.Color().setRGB(WIREFRAME_NEAR_SRGB[0], WIREFRAME_NEAR_SRGB[1], WIREFRAME_NEAR_SRGB[2], THREE.SRGBColorSpace);
+const WIREFRAME_FAR_COLOR = new THREE.Color().setRGB(WIREFRAME_FAR_SRGB[0], WIREFRAME_FAR_SRGB[1], WIREFRAME_FAR_SRGB[2], THREE.SRGBColorSpace);
+const WIREFRAME_NEAR = 4.5;
+const WIREFRAME_FAR = 8.5;
+const wireframeBasicLines = [];
+const _wfWorld = new THREE.Vector3();
+const _wfView = new THREE.Vector3();
+const _wfColor = new THREE.Color();
+function wireframeMetric(worldPos, camera, byDistance) {
+  if (byDistance) return worldPos.distanceTo(camera.position);
+  _wfView.copy(worldPos).applyMatrix4(camera.matrixWorldInverse);
+  return -_wfView.z;
+}
+function wireframeColorAt(metric, target) {
+  const t = THREE.MathUtils.clamp((metric - WIREFRAME_NEAR) / Math.max(WIREFRAME_FAR - WIREFRAME_NEAR, 0.0001), 0.0, 1.0);
+  const r = WIREFRAME_NEAR_SRGB[0] + (WIREFRAME_FAR_SRGB[0] - WIREFRAME_NEAR_SRGB[0]) * t;
+  const g = WIREFRAME_NEAR_SRGB[1] + (WIREFRAME_FAR_SRGB[1] - WIREFRAME_NEAR_SRGB[1]) * t;
+  const b = WIREFRAME_NEAR_SRGB[2] + (WIREFRAME_FAR_SRGB[2] - WIREFRAME_NEAR_SRGB[2]) * t;
+  return target.setRGB(r, g, b, THREE.SRGBColorSpace);
+}
+function applyWireframeGradientToLineMaterial(lineMat, byDistance) {
+  if (byDistance) lineMat.defines.USE_WIREFRAME_METRIC_DISTANCE = "";
+  lineMat.customProgramCacheKey = () => `wireframeGrad_${byDistance ? 1 : 0}`;
+  lineMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uNearColor = { value: new THREE.Vector3().fromArray(WIREFRAME_NEAR_SRGB) };
+    shader.uniforms.uFarColor = { value: new THREE.Vector3().fromArray(WIREFRAME_FAR_SRGB) };
+    shader.uniforms.uNear = { value: WIREFRAME_NEAR };
+    shader.uniforms.uFar = { value: WIREFRAME_FAR };
+
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      "#include <common>\nvarying float vWireMetric;"
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <fog_vertex>",
+      `#include <fog_vertex>
+      {
+        vec3 wfLocal = position.y < 0.5 ? instanceStart : instanceEnd;
+        #ifdef USE_WIREFRAME_METRIC_DISTANCE
+        vec3 wfWorld = (modelMatrix * vec4(wfLocal, 1.0)).xyz;
+        vWireMetric = distance(wfWorld, cameraPosition);
+        #else
+        vec4 mvPos = modelViewMatrix * vec4(wfLocal, 1.0);
+        vWireMetric = -mvPos.z;
+        #endif
+      }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+      varying float vWireMetric;
+      uniform vec3 uNearColor;
+      uniform vec3 uFarColor;
+      uniform float uNear;
+      uniform float uFar;
+      vec3 wfSRGBToLinear(vec3 c) {
+        return mix(pow(c * 0.9478672986 + vec3(0.0521327014), vec3(2.4)), c * 0.0773993808, vec3(lessThanEqual(c, vec3(0.04045))));
+      }`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "vec4 diffuseColor = vec4( diffuse, alpha );",
+      `float wt = clamp((vWireMetric - uNear) / max(uFar - uNear, 0.0001), 0.0, 1.0);
+      vec3 gradSrgb = mix(uNearColor, uFarColor, wt);
+      vec4 diffuseColor = vec4(wfSRGBToLinear(gradSrgb), alpha);`
+    );
+  };
+}
+function updateBasicWireframeColors(lines, camera) {
+  const geom = lines.geometry;
+  const pos = geom.attributes.position;
+  let colors = geom.attributes.color;
+  if (!colors) {
+    colors = new THREE.Float32BufferAttribute(new Float32Array(pos.count * 3), 3);
+    geom.setAttribute("color", colors);
+    lines.material.vertexColors = true;
+    lines.material.color.copy(WIREFRAME_NEAR_COLOR);
+  }
+  lines.updateMatrixWorld();
+  const matrixWorld = lines.matrixWorld;
+  for (let i = 0; i < pos.count; i++) {
+    _wfWorld.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+    wireframeColorAt(wireframeMetric(_wfWorld, camera, useDistance), _wfColor);
+    colors.setXYZ(i, _wfColor.r, _wfColor.g, _wfColor.b);
+  }
+  colors.needsUpdate = true;
+}
 
 const MODEL_DIR = "./model/";
 
@@ -158,21 +259,63 @@ window.addEventListener("keyup", (e) => keys.delete(e.code));
         }
       });
       scenePivot.add(root);
-      root.traverse((o) => {
-        if (!o.isMesh) return;
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of mats) {
-          if (!m || !m.isMaterial) continue;
-          m.wireframe = useWireframe;
-          if (useWireframe) {
-            m.color.setRGB(WIREFRAME_GRAY, WIREFRAME_GRAY, WIREFRAME_GRAY);
-            if (m.emissive) m.emissive.setRGB(0.0, 0.0, 0.0);
-            m.map = null;
-            m.normalMap = null;
-            m.aoMap = null;
+      if (useWireframe) {
+        if (useWireframeMaterial) {
+          root.traverse((o) => {
+            if (!o.isMesh) return;
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of mats) {
+              if (!m || !m.isMaterial) continue;
+              m.wireframe = true;
+              m.color.setRGB(WIREFRAME_GRAY, WIREFRAME_GRAY, WIREFRAME_GRAY);
+              if (m.emissive) m.emissive.setRGB(0.0, 0.0, 0.0);
+              m.map = null;
+              m.normalMap = null;
+              m.aoMap = null;
+            }
+          });
+        } else {
+          const wireframeMeshes = [];
+          root.traverse((o) => {
+            if (!o.isMesh || o.isLineSegments2) return;
+            wireframeMeshes.push(o);
+          });
+          for (const o of wireframeMeshes) {
+            const wireGeom = new THREE.WireframeGeometry(o.geometry);
+            let lines;
+            if (useWireframeBasic) {
+              const lineMat = new THREE.LineBasicMaterial({
+                color: WIREFRAME_NEAR_COLOR.clone(),
+                vertexColors: useWireframeGradient,
+                fog: false,
+              });
+              lines = new THREE.LineSegments(wireGeom, lineMat);
+              if (useWireframeGradient) wireframeBasicLines.push(lines);
+            } else {
+              const lineGeom = new LineSegmentsGeometry().fromWireframeGeometry(wireGeom);
+              wireGeom.dispose();
+              const lineMat = new LineMaterial({
+                color: WIREFRAME_NEAR_COLOR.clone(),
+                linewidth: WIREFRAME_LINE_WIDTH,
+                worldUnits: false,
+                fog: false,
+              });
+              if (useWireframeGradient) applyWireframeGradientToLineMaterial(lineMat, useDistance);
+              const pr = renderer.getPixelRatio();
+              lineMat.resolution.set(canvas3d.width * pr, canvas3d.height * pr);
+              lines = new LineSegments2(lineGeom, lineMat);
+              lineMat.alphaToCoverage = true;
+            }
+            lines.position.copy(o.position);
+            lines.quaternion.copy(o.quaternion);
+            lines.scale.copy(o.scale);
+            lines.castShadow = o.castShadow;
+            lines.receiveShadow = o.receiveShadow;
+            (o.parent ?? root).add(lines);
+            o.visible = false;
           }
         }
-      });
+      }
     }
     image_loaded = true;
   } catch (e) {
@@ -207,6 +350,9 @@ mySetAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 1
   }
 
   camera.lookAt(0.0, lookY, 0.0);
+  if (useWireframe && useWireframeBasic && useWireframeGradient) {
+    for (const lines of wireframeBasicLines) updateBasicWireframeColors(lines, camera);
+  }
   renderer.render(scene, camera);
 
   // 2Dグラフィック画面の描画
