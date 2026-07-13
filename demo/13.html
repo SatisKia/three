@@ -31,8 +31,7 @@ const useWireframe = false;
 const useWireframeMaterial = false;
 const WIREFRAME_GRAY = 0.5; // useWireframeMaterial=true時の単色
 const useWireframeBasic = false; // true: LineBasicMaterial+LineSegments / false: LineMaterial+LineSegments2
-const useDistance = false; // useWireframeがtrueの時のみ参照される（true=カメラ距離、false=ビュー深度）
-const WIREFRAME_LINE_WIDTH = 1.0; // CSSピクセル単位（useWireframeBasic=true時は無効）
+const useDistance = false; // true=カメラ距離、false=ビュー深度
 const useWireframeGradient = false; // d2js版と同様にnear/farでグラデーション
 // d2js版と同じsRGB値（mixはこの空間で行い、Three.js内部ではリニアに変換して渡す）
 const WIREFRAME_NEAR_SRGB = [1.0, 1.0, 1.0];
@@ -41,6 +40,7 @@ const WIREFRAME_NEAR_COLOR = new THREE.Color().setRGB(WIREFRAME_NEAR_SRGB[0], WI
 const WIREFRAME_FAR_COLOR = new THREE.Color().setRGB(WIREFRAME_FAR_SRGB[0], WIREFRAME_FAR_SRGB[1], WIREFRAME_FAR_SRGB[2], THREE.SRGBColorSpace);
 const WIREFRAME_NEAR = 4.5;
 const WIREFRAME_FAR = 8.5;
+const WIREFRAME_LINE_WIDTH = 1.0; // CSSピクセル単位
 const wireframeBasicLines = [];
 const _wfWorld = new THREE.Vector3();
 const _wfView = new THREE.Vector3();
@@ -56,6 +56,25 @@ function wireframeColorAt(metric, target) {
   const g = WIREFRAME_NEAR_SRGB[1] + (WIREFRAME_FAR_SRGB[1] - WIREFRAME_NEAR_SRGB[1]) * t;
   const b = WIREFRAME_NEAR_SRGB[2] + (WIREFRAME_FAR_SRGB[2] - WIREFRAME_NEAR_SRGB[2]) * t;
   return target.setRGB(r, g, b, THREE.SRGBColorSpace);
+}
+function updateBasicWireframeColors(lines, camera) {
+  const geom = lines.geometry;
+  const pos = geom.attributes.position;
+  let colors = geom.attributes.color;
+  if (!colors) {
+    colors = new THREE.Float32BufferAttribute(new Float32Array(pos.count * 3), 3);
+    geom.setAttribute("color", colors);
+    lines.material.vertexColors = true;
+    lines.material.color.copy(WIREFRAME_NEAR_COLOR);
+  }
+  lines.updateMatrixWorld();
+  const matrixWorld = lines.matrixWorld;
+  for (let i = 0; i < pos.count; i++) {
+    _wfWorld.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+    wireframeColorAt(wireframeMetric(_wfWorld, camera, useDistance), _wfColor);
+    colors.setXYZ(i, _wfColor.r, _wfColor.g, _wfColor.b);
+  }
+  colors.needsUpdate = true;
 }
 function applyWireframeGradientToLineMaterial(lineMat, byDistance) {
   if (byDistance) lineMat.defines.USE_WIREFRAME_METRIC_DISTANCE = "";
@@ -104,25 +123,6 @@ function applyWireframeGradientToLineMaterial(lineMat, byDistance) {
       vec4 diffuseColor = vec4(wfSRGBToLinear(gradSrgb), alpha);`
     );
   };
-}
-function updateBasicWireframeColors(lines, camera) {
-  const geom = lines.geometry;
-  const pos = geom.attributes.position;
-  let colors = geom.attributes.color;
-  if (!colors) {
-    colors = new THREE.Float32BufferAttribute(new Float32Array(pos.count * 3), 3);
-    geom.setAttribute("color", colors);
-    lines.material.vertexColors = true;
-    lines.material.color.copy(WIREFRAME_NEAR_COLOR);
-  }
-  lines.updateMatrixWorld();
-  const matrixWorld = lines.matrixWorld;
-  for (let i = 0; i < pos.count; i++) {
-    _wfWorld.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
-    wireframeColorAt(wireframeMetric(_wfWorld, camera, useDistance), _wfColor);
-    colors.setXYZ(i, _wfColor.r, _wfColor.g, _wfColor.b);
-  }
-  colors.needsUpdate = true;
 }
 
 const MODEL_DIR = "./model/";
