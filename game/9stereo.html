@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <title></title>
-<script src="api.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -19,25 +18,14 @@ import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambe
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
 
-function detectRuntime() {
-  // NW.js上で動作しているかの判定
-  const isNW = typeof globalThis.nw === "object" || typeof globalThis.nw?.Window === "function";
-  if (isNW) return "nwjs";
-
-  // Electron上で動作しているかの判定
-  const ua = navigator.userAgent || "";
-  const hasProcess = typeof globalThis.process === "object" && globalThis.process;
-  const isElectron = ua.includes("Electron") || (hasProcess && !!globalThis.process?.versions?.electron);
-  if (isElectron) return "electron";
-
-  return "browser";
-}
-
 const drawHitFlag = false;
 
 const MODEL_DIR = "./model/";
 
 const FRAME_INTERVAL_MS = 1000 / WAIT_1;
+
+const STEREO_TRANS = 0.2;
+const STEREO_EYE_SEP = 2 * STEREO_TRANS;
 
 const AMBIENT_LIGHT_COEF = 1.5; // d2js版と見た目が同じになるように係数をかける
 const DIRECTIONAL_LIGHT_COEF = 12.0; // d2js版と見た目が同じになるように係数をかける
@@ -54,32 +42,42 @@ const canvas3d = document.getElementById("hoge_canvas");
 const canvas2d = document.getElementById("fuga_canvas");
 
 const enemyHudProj = new THREE.Vector3();
-const hitProjNdc = new THREE.Vector3(); // 投影したワールド座標をNDC座標（Normalized Device Coordinates。-1～+1の正規化スクリーン座標）に変換
-const hitUnproj = new THREE.Vector3(); // NDC座標をワールド座標に変換
+const hitProjNdc = new THREE.Vector3();
+const hitProjEdge = new THREE.Vector3();
+const camRight = new THREE.Vector3();
 
-// 投影＋横1px分のunprojectで画面上の半径を決める
 function drawHit(context, wx, wy, wz, radiusWorld) {
   if (!drawHitFlag) return;
-  hitProjNdc.set(wx, wy, wz);
-  hitProjNdc.project(camera);
-  if (hitProjNdc.z < -1.0 || hitProjNdc.z > 1.0) return;
-  const ndcX = hitProjNdc.x;
-  const ndcY = hitProjNdc.y;
-  const ndcZ = hitProjNdc.z;
-  const ndcX1px = ndcX + 2.0 / canvas3d.width;
-  hitUnproj.set(ndcX1px, ndcY, ndcZ);
-  hitUnproj.unproject(camera);
-  const dx = wx - hitUnproj.x;
-  const dy = wy - hitUnproj.y;
-  const dz = wz - hitUnproj.z;
-  const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-8;
-  const r = radiusWorld / d;
-  const px = (ndcX * 0.5 + 0.5) * canvas2d.width;
-  const py = (-ndcY * 0.5 + 0.5) * canvas2d.height;
-  context.strokeStyle = "rgba(255, 0, 255, 0.5)";
-  context.beginPath();
-  context.arc(px, py, r, 0, Math.PI * 2.0);
-  context.stroke();
+  const width = canvas2d.width / 2;
+  const hitViews = [
+    { camera: stereoCamera.cameraL, offsetX: 0 },
+    { camera: stereoCamera.cameraR, offsetX: width },
+  ];
+  for (const { camera, offsetX } of hitViews) {
+    // 1点目
+    hitProjNdc.set(wx, wy, wz);
+    hitProjNdc.project(camera); // 同じカメラで投影
+    if (hitProjNdc.z < -1.0 || hitProjNdc.z > 1.0) continue;
+
+    // 2点目
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize(); // camera.matrixWorldの第0列
+    const wx2 = wx + camRight.x * radiusWorld;
+    const wy2 = wy + camRight.y * radiusWorld;
+    const wz2 = wz + camRight.z * radiusWorld;
+    hitProjEdge.set(wx2, wy2, wz2);
+    hitProjEdge.project(camera); // 同じカメラで投影
+    if (hitProjEdge.z < -1.0 || hitProjEdge.z > 1.0) continue;
+
+    const px = (hitProjNdc.x * 0.5 + 0.5) * width + offsetX;
+    const py = (-hitProjNdc.y * 0.5 + 0.5) * canvas2d.height;
+    const pxEdge = (hitProjEdge.x * 0.5 + 0.5) * width + offsetX;
+    const r = Math.abs(pxEdge - px); // 画面上の横距離を半径に
+
+    context.strokeStyle = "rgba(255, 0, 255, 0.5)";
+    context.beginPath();
+    context.arc(px, py, r, 0, Math.PI * 2.0);
+    context.stroke();
+  }
 }
 
 function applyShadowFlags(root, cast, receive) {
@@ -95,7 +93,10 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xffffff);
 scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
 
-const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 1000.0);
+const stereoCamera = new THREE.StereoCamera();
+stereoCamera.eyeSep = STEREO_EYE_SEP;
+stereoCamera.aspect = (canvas3d.width / 2) / canvas3d.height;
+const camera = new THREE.PerspectiveCamera(45.0, stereoCamera.aspect, 0.1, 1000.0);
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
@@ -126,6 +127,30 @@ scene.add(light.target);
 const keys = {};
 window.addEventListener("keydown", (e) => { keys[e.code] = true; });
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+function renderStereo() {
+  camera.updateMatrixWorld();
+  stereoCamera.update(camera);
+  stereoCamera.cameraL.layers.mask = camera.layers.mask;
+  stereoCamera.cameraR.layers.mask = camera.layers.mask;
+
+  const size = new THREE.Vector2();
+  renderer.getSize(size);
+  const halfW = Math.floor(size.width / 2);
+
+  renderer.setScissorTest(true);
+
+  renderer.setViewport(0, 0, halfW, size.height);
+  renderer.setScissor(0, 0, halfW, size.height);
+  renderer.render(scene, stereoCamera.cameraL);
+
+  renderer.setViewport(halfW, 0, halfW, size.height);
+  renderer.setScissor(halfW, 0, halfW, size.height);
+  renderer.render(scene, stereoCamera.cameraR);
+
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, size.width, size.height);
+}
 
 let jiki = new Jiki(1.0);
 let jikiModel = null;
@@ -510,15 +535,13 @@ mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   );
   light.target.position.set(look_x, look_y, look_z);
 
-  renderer.render(scene, camera);
+  renderStereo();
 
   // 2Dグラフィック画面の描画
   const context = canvas2d.getContext("2d");
   context.clearRect(0, 0, canvas2d.width, canvas2d.height);
-if (detectRuntime() === "browser") {
   context.strokeStyle = "rgb(0, 0, 0)";
   context.strokeRect(0, 0, canvas2d.width - 1, canvas2d.height - 1);
-}
 
   if (jikiModel) {
     drawHit(context, jiki.x(), jiki.y(), jiki.z(), jiki.radius());
@@ -538,56 +561,60 @@ if (detectRuntime() === "browser") {
     drawHit(context, tmp.x(), tmp.y(), tmp.z(), tmp.radius());
   }
 
+  const width = canvas2d.width / 2;
   context.font = "24px 'MS Gothic', sans-serif";
   context.fillStyle = "#000";
   context.fillText("SCORE", 0, 24);
+  context.fillText("SCORE", width, 24);
   const str = String(score);
-  context.fillText(str, canvas2d.width / 3.0 - context.measureText(str).width, 24);
+  const strWidth = context.measureText(str).width;
+  context.fillText(str, width / 3.0 - strWidth, 24);
+  context.fillText(str, width + width / 3.0 - strWidth, 24);
 
   context.strokeStyle = "rgb(0, 255, 255)";
   context.fillStyle = "rgb(0, 255, 255)";
   context.lineWidth = 1.0;
   context.font = "8px 'MS Gothic', sans-serif";
   context.textBaseline = "bottom";
-  for (let i = 0; i < enemies.length; i++) {
-    const tmp = enemies[i].enemy;
-    enemyHudProj.set(tmp.x(), tmp.y(), tmp.z());
-    enemyHudProj.project(camera);
-    if (enemyHudProj.z < -1.0 || enemyHudProj.z > 1.0) continue;
-    const px = (enemyHudProj.x * 0.5 + 0.5) * canvas2d.width;
-    const py = (-enemyHudProj.y * 0.5 + 0.5) * canvas2d.height;
-    const dx = tmp.x() - jiki.x();
-    const dy = tmp.y() - jiki.y();
-    const dz = tmp.z() - jiki.z();
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    let seg = 50.0 - distance;
-    if (seg < 15.0) seg = 15.0;
-    const tx = px + seg + 20.0;
-    const ty = py - seg;
-    context.beginPath();
-    context.moveTo(px, py);
-    context.lineTo(px + seg, ty);
-    context.lineTo(tx, ty);
-    context.stroke();
-    const label = String((distance * 100.0) | 0);
-    const whole = label.slice(0, -2) || "0";
-    const frac = label.slice(-2).padStart(2, "0");
-    context.fillText(`${whole}.${frac}`, px + seg, ty);
+  const hudViews = [
+    { camera: stereoCamera.cameraL, offsetX: 0 },
+    { camera: stereoCamera.cameraR, offsetX: width },
+  ];
+  for (const { camera, offsetX } of hudViews) {
+    for (let i = 0; i < enemies.length; i++) {
+      const tmp = enemies[i].enemy;
+      enemyHudProj.set(tmp.x(), tmp.y(), tmp.z());
+      enemyHudProj.project(camera);
+      if (enemyHudProj.z < -1.0 || enemyHudProj.z > 1.0) continue;
+      const px = (enemyHudProj.x * 0.5 + 0.5) * width + offsetX;
+      const py = (-enemyHudProj.y * 0.5 + 0.5) * canvas2d.height;
+      const dx = tmp.x() - jiki.x();
+      const dy = tmp.y() - jiki.y();
+      const dz = tmp.z() - jiki.z();
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      let seg = 50.0 - distance;
+      if (seg < 15.0) seg = 15.0;
+      const tx = px + seg + 20.0;
+      const ty = py - seg;
+      context.beginPath();
+      context.moveTo(px, py);
+      context.lineTo(px + seg, ty);
+      context.lineTo(tx, ty);
+      context.stroke();
+      const label = String((distance * 100.0) | 0);
+      const whole = label.slice(0, -2) || "0";
+      const frac = label.slice(-2).padStart(2, "0");
+      context.fillText(`${whole}.${frac}`, px + seg, ty);
+    }
   }
 });
 </script>
-<style type="text/css">
-html, body {
-  margin:0;
-  padding:0;
-}
-</style>
 </head>
 <body>
 <div align="center">
   <div style="position:relative">
-    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
-    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="1024" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="1024" height="480"></canvas>
   </div>
 </div>
 </body>
