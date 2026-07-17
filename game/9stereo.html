@@ -96,6 +96,7 @@ scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
 const stereoCamera = new THREE.StereoCamera();
 stereoCamera.eyeSep = STEREO_EYE_SEP;
 stereoCamera.aspect = (canvas3d.width / 2) / canvas3d.height;
+
 const camera = new THREE.PerspectiveCamera(45.0, stereoCamera.aspect, 0.1, 1000.0);
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
