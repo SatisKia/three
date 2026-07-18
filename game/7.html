@@ -15,7 +15,7 @@
 <script type="module">
 import * as THREE from "three";
 import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
-import { _DIV, _MOD, GROUND_SIZE, Jiki, JikiJet, JikiShots, WAIT_1 } from "./gameCommon.js";
+import { _DIV, _MOD, GROUND_SIZE, Jiki, JikiJet, JikiShots, modelBoundingRadius, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -114,14 +114,7 @@ function addJetParticle(jet) {
     convertMaterialsToLambert(shotTemplate);
     applySmoothShading(shotTemplate);
     shotTemplate.scale.setScalar(0.01);
-    {
-      // ワールド単位のおおよその半径（バウンディングボックス最大辺の半分）
-      const box = new THREE.Box3().setFromObject(shotTemplate);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const sr = Math.max(size.x, size.y, size.z) * 0.5 * 1.5;
-      jikiShots = new JikiShots(sr);
-    }
+    jikiShots = new JikiShots(modelBoundingRadius(shotTemplate) * 1.5);
 
     setGroundTiles();
   } catch (e) {
