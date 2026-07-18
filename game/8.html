@@ -252,7 +252,6 @@ function syncShotModels() {
     const s = jikiShots.get(i);
     model.position.set(s.x(), s.y(), s.z());
     model.lookAt(s.x() + s.vx(), s.y() + s.vy(), s.z() + s.vz());
-    // 7.htmlのupdateShotModelと同じ理由で「+rz」（d2jsの「-rz」相当の見え方）
     model.rotateZ(THREE.MathUtils.degToRad(s.rz()));
   }
 }

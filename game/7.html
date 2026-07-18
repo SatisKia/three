@@ -92,6 +92,29 @@ function addJetParticle(jet) {
   jetList.push({ jet, sprite });
 }
 
+function syncShotModels() {
+  if (!jikiShots || !shotTemplate) return;
+  while (shotModels.length < jikiShots.size()) {
+    const m = shotTemplate.clone(true);
+    scene.add(m);
+    shotModels.push(m);
+  }
+  while (shotModels.length > jikiShots.size()) {
+    const m = shotModels.pop();
+    scene.remove(m);
+  }
+  for (let i = 0; i < jikiShots.size(); i++) {
+    const model = shotModels[i];
+    const s = jikiShots.get(i);
+    model.position.set(s.x(), s.y(), s.z());
+    model.lookAt(s.x() + s.vx(), s.y() + s.vy(), s.z() + s.vz());
+    // d2jsはglu.rotate(-shot.rz, 0,0,1)。進行方向はlookAt逆行列＋multiplyのためローカルZの向きが
+    // Object3D.lookAt(速度方向)後のローカルZと鏡映になり、同じ「-rz」でもロールが反対に見える。
+    // 自機poseのrz（gameCommon poseは「+rz」）と弾の傾きを揃えるにはここは「+rz」。
+    model.rotateZ(THREE.MathUtils.degToRad(s.rz()));
+  }
+}
+
 (async () => {
   try {
     const loader = new THREE.TextureLoader();
@@ -163,29 +186,8 @@ mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
     if (keys.Space) {
       jikiShots.add(elapse, jiki.x(), jiki.y(), jiki.z(), jiki.vx(), jiki.vy(), jiki.vz(), jiki.rz());
     }
-    jikiShots.update(false);
-    if (jikiShots && shotTemplate) {
-      while (shotModels.length < jikiShots.size()) {
-        const tmp = shotTemplate.clone(true);
-        scene.add(tmp);
-        shotModels.push(tmp);
-      }
-      while (shotModels.length > jikiShots.size()) {
-        const tmp = shotModels.pop();
-        scene.remove(tmp);
-      }
-      for (let i = 0; i < jikiShots.size(); i++) {
-        const model = shotModels[i];
-        const shot = jikiShots.get(i);
-        model.position.set(shot.x(), shot.y(), shot.z());
-        const tmp = new THREE.Vector3(shot.x() + shot.vx(), shot.y() + shot.vy(), shot.z() + shot.vz());
-        model.lookAt(tmp);
-        // d2jsはglu.rotate(-shot.rz, 0,0,1)。進行方向はlookAt逆行列＋multiplyのためローカルZの向きが
-        // Object3D.lookAt(速度方向)後のローカルZと鏡映になり、同じ「-rz」でもロールが反対に見える。
-        // 自機poseのrz（gameCommon poseは「+rz」）と弾の傾きを揃えるにはここは「+rz」。
-        model.rotateZ(THREE.MathUtils.degToRad(shot.rz()));
-      }
-    }
+    jikiShots.update(true);
+    syncShotModels();
   }
 
   const camera_vx = -jiki.vx() * 10.0;
