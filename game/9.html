@@ -9,15 +9,18 @@
   "imports": {
     "three": "./node_modules/three/build/three.module.js",
     "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js",
+    "three/addons/loaders/AudioLoader.js": "./node_modules/three/examples/jsm/loaders/AudioLoader.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from "three";
+import { AudioLoader } from "three/addons/loaders/AudioLoader.js";
 import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
+import { ThreeGamepad } from "./threeGamepad.js";
 
 function detectRuntime() {
   // NW.js上で動作しているかの判定
@@ -34,6 +37,118 @@ function detectRuntime() {
 }
 
 const drawHitFlag = false;
+const useGamepad = false;
+const useSound = false;
+
+let gamepad;
+let padInfo;
+let step = 0;
+let requestIncStep = false;
+
+// BGM
+const BGM_MAIN = 0;
+let bgm = null;
+let bgmPlaying = false;
+const bgmSrc = [
+  "mp3/bgm_main.mp3",
+];
+
+// SE
+const SE_JIKI_SHOT = 0;
+const SE_BAKU = 1;
+const se = [];
+const seSrc = [
+  "mp3/se_jiki_shot.mp3",
+  "mp3/se_baku.mp3",
+];
+
+// ゲームパッド対応
+const PAD_TYPE_BUTTON = 0;
+const PAD_TYPE_AXIS_MINUS = 1;
+const PAD_TYPE_AXIS_PLUS = 2;
+function MyPadInfo() {
+  this.type = PAD_TYPE_BUTTON;
+  this.index = -1;
+}
+function waitInputPad(pad, info) {
+  if (pad == null) {
+    return true;
+  }
+  for (let i = 0; i < pad.buttonNum(); i++) {
+    if (pad.isButtonPressed(i)) {
+      info.type = PAD_TYPE_BUTTON;
+      info.index = i;
+      return true;
+    }
+  }
+  for (let i = 0; i < pad.axisNum(); i++) {
+    const value = pad.axisValue(i);
+    if (value === 1.0) {
+      info.type = PAD_TYPE_AXIS_PLUS;
+      info.index = i;
+      return true;
+    }
+    if (value === -1.0) {
+      info.type = PAD_TYPE_AXIS_MINUS;
+      info.index = i;
+      return true;
+    }
+  }
+  return false;
+}
+function isInputPad(pad, info) {
+  if (pad != null) {
+    switch (info.type) {
+    case PAD_TYPE_BUTTON:
+      return pad.isButtonPressed(info.index);
+    case PAD_TYPE_AXIS_MINUS:
+      return pad.axisValue(info.index) < 0.0;
+    case PAD_TYPE_AXIS_PLUS:
+      return pad.axisValue(info.index) > 0.0;
+    }
+  }
+  return false;
+}
+function processGamepadEvent(type, id, param) {
+  switch (type) {
+  case ThreeGamepad.BUTTON_RELEASED_EVENT:
+  case ThreeGamepad.AXIS_MINUS_RELEASED_EVENT:
+  case ThreeGamepad.AXIS_PLUS_RELEASED_EVENT:
+    if (requestIncStep) {
+      requestIncStep = false;
+      step++;
+    }
+    break;
+  }
+}
+
+// BGM再生
+function stopMusic() {
+  if (bgm != null && bgm.isPlaying) {
+    bgm.stop();
+  }
+}
+function playMusic(id) {
+  if (bgm?.buffer && !bgm.isPlaying) {
+    bgm.play();
+  }
+}
+
+// SE再生
+let soundId = -1;
+function resetSound() {
+  soundId = -1;
+}
+function playSound(id) {
+  const audio = se[id];
+  if (audio?.buffer && id !== soundId) {
+    soundId = id;
+    if (audio.isPlaying) {
+      audio.stop();
+    }
+    audio.play();
+  }
+}
 
 const MODEL_DIR = "./model/";
 
@@ -96,6 +211,8 @@ scene.background = new THREE.Color(0xffffff);
 scene.fog = new THREE.Fog(0xffffff, 50.0, 500.0);
 
 const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 1000.0);
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
 renderer.setSize(canvas3d.width, canvas3d.height);
@@ -155,6 +272,9 @@ let score = 0;
 
 function addBaku(x, y, z) {
   if (!texBaku) return;
+  if (useSound) {
+    playSound(SE_BAKU);
+  }
   const vx = rand.next(50) / 50.0;
   const vy = rand.next(50) / 50.0;
   const vz = rand.next(50) / 50.0;
@@ -303,6 +423,38 @@ function syncShotModels() {
   }
 }
 
+if (useGamepad) {
+  gamepad = new ThreeGamepad();
+  gamepad.setTolerance(0.5, 1.0);
+  gamepad.addEventListener(processGamepadEvent);
+  padInfo = new Array(5);
+  for (let i = 0; i < 5; i++) {
+    padInfo[i] = new MyPadInfo();
+  }
+}
+
+if (useSound) {
+  bgm = new THREE.Audio(audioListener);
+  se[SE_JIKI_SHOT] = new THREE.Audio(audioListener);
+  se[SE_BAKU] = new THREE.Audio(audioListener);
+  const audioLoader = new AudioLoader();
+  audioLoader.load(bgmSrc[BGM_MAIN], (buffer) => {
+    bgm.setBuffer(buffer);
+    bgm.setLoop(true);
+    bgm.setVolume(0.75);
+  });
+  audioLoader.load(seSrc[SE_JIKI_SHOT], (buffer) => {
+    se[SE_JIKI_SHOT].setBuffer(buffer);
+    se[SE_JIKI_SHOT].setLoop(false);
+    se[SE_JIKI_SHOT].setVolume(1.0);
+  });
+  audioLoader.load(seSrc[SE_BAKU], (buffer) => {
+    se[SE_BAKU].setBuffer(buffer);
+    se[SE_BAKU].setLoop(false);
+    se[SE_BAKU].setVolume(1.0);
+  });
+}
+
 (async () => {
   try {
     rand = new MyRandom();
@@ -358,13 +510,54 @@ function syncShotModels() {
 })();
 
 mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
+  if (useGamepad && step < 5) {
+    renderer.render(scene, camera);
+
+    const context = canvas2d.getContext("2d");
+    context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+if (detectRuntime() === "browser") {
+    context.strokeStyle = "rgb(0, 0, 0)";
+    context.strokeRect(0, 0, canvas2d.width - 1, canvas2d.height - 1);
+}
+
+    context.font = "24px 'MS Gothic', sans-serif";
+    context.fillStyle = "#000";
+    switch (step) {
+    case 0: context.fillText("パッド上を入力してください", 0, 24); break;
+    case 1: context.fillText("パッド下を入力してください", 0, 24); break;
+    case 2: context.fillText("パッド左を入力してください", 0, 24); break;
+    case 3: context.fillText("パッド右を入力してください", 0, 24); break;
+    case 4: context.fillText("パッドボタンを入力してください", 0, 24); break;
+    }
+    const _pad = (ThreeGamepad.canUseGamepad() && gamepad.fetch(0) != null) ? gamepad : null;
+    if (_pad != null && waitInputPad(_pad, padInfo[step])) {
+      requestIncStep = true;
+    }
+
+    return;
+  }
+
+  if (useSound) {
+    // BGM再生
+    if (!bgmPlaying) {
+      playMusic(BGM_MAIN);
+      if (bgm?.isPlaying) {
+        bgmPlaying = true;
+      }
+    }
+
+    // SE
+    resetSound();
+  }
+
   elapse++;
 
+  const _gamepad = (useGamepad && ThreeGamepad.canUseGamepad() && gamepad.fetch(0) != null) ? gamepad : null;
   jiki.update(
-    !!keys.ArrowUp,
-    !!keys.ArrowDown,
-    !!keys.ArrowLeft,
-    !!keys.ArrowRight
+    !!keys.ArrowUp || (useGamepad && isInputPad(_gamepad, padInfo[0])),
+    !!keys.ArrowDown || (useGamepad && isInputPad(_gamepad, padInfo[1])),
+    !!keys.ArrowLeft || (useGamepad && isInputPad(_gamepad, padInfo[2])),
+    !!keys.ArrowRight || (useGamepad && isInputPad(_gamepad, padInfo[3]))
   );
   setGroundTiles();
   if (jikiModel) jiki.pose(jikiModel);
@@ -395,8 +588,12 @@ mySetAnimationLoop(renderer, FRAME_INTERVAL_MS, () => {
   }
 
   if (jikiShots) {
-    if (keys.Space) {
-      jikiShots.add(elapse, jiki.x(), jiki.y(), jiki.z(), jiki.vx(), jiki.vy(), jiki.vz(), jiki.rz());
+    if (keys.Space || (useGamepad && isInputPad(_gamepad, padInfo[4]))) {
+      if (jikiShots.add(elapse, jiki.x(), jiki.y(), jiki.z(), jiki.vx(), jiki.vy(), jiki.vz(), jiki.rz())) {
+        if (useSound) {
+          playSound(SE_JIKI_SHOT);
+        }
+      }
     }
     jikiShots.update(true);
     syncShotModels();
