@@ -9,14 +9,12 @@
   "imports": {
     "three": "./node_modules/three/build/three.module.js",
     "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
-    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js",
-    "three/addons/loaders/AudioLoader.js": "./node_modules/three/examples/jsm/loaders/AudioLoader.js"
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js"
   }
 }
 </script>
 <script type="module">
 import * as THREE from "three";
-import { AudioLoader } from "three/addons/loaders/AudioLoader.js";
 import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambert, loadObjMtl } from "./loadObjMtl.js";
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
@@ -216,6 +214,18 @@ const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.heigh
 if (useSound) {
   audioListener = new THREE.AudioListener();
   camera.add(audioListener);
+
+  // 最初のユーザー操作でAudioContextを解放する
+  const unlockAudio = () => {
+    const ctx = audioListener?.context;
+    if (ctx && ctx.state !== "running") {
+      ctx.resume();
+    }
+  };
+  // iOSはclickが確実。デスクトップはpointerdown/keydownでも解放できるよう登録
+  window.addEventListener("click", unlockAudio, { once: true });
+  window.addEventListener("keydown", unlockAudio, { once: true });
+  window.addEventListener("pointerdown", unlockAudio, { once: true });
 }
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
@@ -441,7 +451,7 @@ if (useSound) {
   bgm = new THREE.Audio(audioListener);
   se[SE_JIKI_SHOT] = new THREE.Audio(audioListener);
   se[SE_BAKU] = new THREE.Audio(audioListener);
-  const audioLoader = new AudioLoader();
+  const audioLoader = new THREE.AudioLoader();
   audioLoader.load(bgmSrc[BGM_MAIN], (buffer) => {
     bgm.setBuffer(buffer);
     bgm.setLoop(true);
