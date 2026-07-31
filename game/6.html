@@ -58,7 +58,7 @@ let texJet = null;
 let elapse = 0;
 
 function setGroundTiles() {
-  if (!groundTemplate) return; // initのload完了前はアニメループが先に回る
+  if (!groundTemplate) return; // loadObjMtlが非同期なため、完了前にアニメループが回る
   const gx = Math.floor(jiki.x() / GROUND_SIZE) * GROUND_SIZE;
   const gz = Math.floor(jiki.z() / GROUND_SIZE) * GROUND_SIZE;
   let i = 0;
