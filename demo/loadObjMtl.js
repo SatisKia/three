@@ -43,7 +43,37 @@ export async function loadObjMtl(basePath, modelName) {
       if (kaMap.has(material.name)) material.userData.mtlKaRgb = kaMap.get(material.name);
     }
   });
+
+  root.userData.objMtlSourceUuid = root.uuid;
   return root;
+}
+
+export function disposeObjMtlRoot(root) {
+  if (!root) return;
+
+  // 親から外す（シーンに登録されている場合）
+  root.parent?.remove(root);
+
+  // root.userData.objMtlSourceUuidとroot.uuidとが異なるときcloneとみなす
+  const sourceUuid = root.userData?.objMtlSourceUuid;
+  if (sourceUuid != null && sourceUuid !== root.uuid) return;
+
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+
+    obj.geometry?.dispose();
+
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const material of materials) {
+      if (!material) continue;
+
+      // テクスチャを解放
+      for (const value of Object.values(material)) {
+        if (value?.isTexture) value.dispose();
+      }
+      material.dispose();
+    }
+  });
 }
 
 // MTLLoaderが付与するMeshPhong等をLambertにし、d2js版に近い拡散光モデルに寄せる

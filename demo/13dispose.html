@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/loaders/OBJLoader.js": "./node_modules/three/examples/jsm/loaders/OBJLoader.js",
+    "three/addons/loaders/MTLLoader.js": "./node_modules/three/examples/jsm/loaders/MTLLoader.js",
+    "three/addons/lines/LineMaterial.js": "./node_modules/three/examples/jsm/lines/LineMaterial.js",
+    "three/addons/lines/LineSegments2.js": "./node_modules/three/examples/jsm/lines/LineSegments2.js",
+    "three/addons/lines/LineSegmentsGeometry.js": "./node_modules/three/examples/jsm/lines/LineSegmentsGeometry.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { applyDiffuse, applyDiffuseMapsFromUrls, applyKaBlendToDiffuse, applySmoothShading, convertMaterialsToLambert, disposeObjMtlRoot, loadObjMtl } from "./loadObjMtl.js";
+import { mySetAnimationLoop } from "./common.js";
+
+const useDirectionalLight = true;
+const usePointLight = false;
+const useSpotLight = false;
+
+const useTemplate = true;
+const CHARACTER_NAMES = ["witch", "cat", "swan"];
+const modelTemplates = { witch: null, cat: null, swan: null };
+const modelRoots = { witch: null, cat: null, swan: null };
+let dispMode = 0;
+
+const useWireframe = false;
+const useWireframeMaterial = false;
+const WIREFRAME_GRAY = 0.5; // useWireframeMaterial=true時の単色
+const useWireframeBasic = false; // true: LineBasicMaterial+LineSegments / false: LineMaterial+LineSegments2
+const useDistance = false; // true=カメラ距離、false=ビュー深度
+const useWireframeGradient = false; // d2js版と同様にnear/farでグラデーション
+// d2js版と同じsRGB値（mixはこの空間で行い、Three.js内部ではリニアに変換して渡す）
+const WIREFRAME_NEAR_SRGB = [1.0, 1.0, 1.0];
+const WIREFRAME_FAR_SRGB = [0.5, 0.5, 1.0];
+const WIREFRAME_NEAR_COLOR = new THREE.Color().setRGB(WIREFRAME_NEAR_SRGB[0], WIREFRAME_NEAR_SRGB[1], WIREFRAME_NEAR_SRGB[2], THREE.SRGBColorSpace);
+const WIREFRAME_FAR_COLOR = new THREE.Color().setRGB(WIREFRAME_FAR_SRGB[0], WIREFRAME_FAR_SRGB[1], WIREFRAME_FAR_SRGB[2], THREE.SRGBColorSpace);
+const WIREFRAME_NEAR = 4.5;
+const WIREFRAME_FAR = 8.5;
+const WIREFRAME_LINE_WIDTH = 1.0; // CSSピクセル単位
+const wireframeBasicLines = [];
+const _wfWorld = new THREE.Vector3();
+const _wfView = new THREE.Vector3();
+const _wfColor = new THREE.Color();
+function wireframeMetric(worldPos, camera, byDistance) {
+  if (byDistance) return worldPos.distanceTo(camera.position);
+  _wfView.copy(worldPos).applyMatrix4(camera.matrixWorldInverse);
+  return -_wfView.z;
+}
+function wireframeColorAt(metric, target) {
+  const t = THREE.MathUtils.clamp((metric - WIREFRAME_NEAR) / Math.max(WIREFRAME_FAR - WIREFRAME_NEAR, 0.0001), 0.0, 1.0);
+  const r = WIREFRAME_NEAR_SRGB[0] + (WIREFRAME_FAR_SRGB[0] - WIREFRAME_NEAR_SRGB[0]) * t;
+  const g = WIREFRAME_NEAR_SRGB[1] + (WIREFRAME_FAR_SRGB[1] - WIREFRAME_NEAR_SRGB[1]) * t;
+  const b = WIREFRAME_NEAR_SRGB[2] + (WIREFRAME_FAR_SRGB[2] - WIREFRAME_NEAR_SRGB[2]) * t;
+  return target.setRGB(r, g, b, THREE.SRGBColorSpace);
+}
+function updateBasicWireframeColors(lines, camera) {
+  const geom = lines.geometry;
+  const pos = geom.attributes.position;
+  let colors = geom.attributes.color;
+  if (!colors) {
+    colors = new THREE.Float32BufferAttribute(new Float32Array(pos.count * 3), 3);
+    geom.setAttribute("color", colors);
+    lines.material.vertexColors = true;
+    lines.material.color.copy(WIREFRAME_NEAR_COLOR);
+  }
+  lines.updateMatrixWorld();
+  const matrixWorld = lines.matrixWorld;
+  for (let i = 0; i < pos.count; i++) {
+    _wfWorld.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+    wireframeColorAt(wireframeMetric(_wfWorld, camera, useDistance), _wfColor);
+    colors.setXYZ(i, _wfColor.r, _wfColor.g, _wfColor.b);
+  }
+  colors.needsUpdate = true;
+}
+function applyWireframeGradientToLineMaterial(lineMat, byDistance) {
+  if (byDistance) lineMat.defines.USE_WIREFRAME_METRIC_DISTANCE = "";
+  lineMat.customProgramCacheKey = () => `wireframeGrad_${byDistance ? 1 : 0}`;
+  lineMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uNearColor = { value: new THREE.Vector3().fromArray(WIREFRAME_NEAR_SRGB) };
+    shader.uniforms.uFarColor = { value: new THREE.Vector3().fromArray(WIREFRAME_FAR_SRGB) };
+    shader.uniforms.uNear = { value: WIREFRAME_NEAR };
+    shader.uniforms.uFar = { value: WIREFRAME_FAR };
+
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      "#include <common>\nvarying float vWireMetric;"
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <fog_vertex>",
+      `#include <fog_vertex>
+      {
+        vec3 wfLocal = position.y < 0.5 ? instanceStart : instanceEnd;
+        #ifdef USE_WIREFRAME_METRIC_DISTANCE
+        vec3 wfWorld = (modelMatrix * vec4(wfLocal, 1.0)).xyz;
+        vWireMetric = distance(wfWorld, cameraPosition);
+        #else
+        vec4 mvPos = modelViewMatrix * vec4(wfLocal, 1.0);
+        vWireMetric = -mvPos.z;
+        #endif
+      }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+      varying float vWireMetric;
+      uniform vec3 uNearColor;
+      uniform vec3 uFarColor;
+      uniform float uNear;
+      uniform float uFar;
+      vec3 wfSRGBToLinear(vec3 c) {
+        return mix(pow(c * 0.9478672986 + vec3(0.0521327014), vec3(2.4)), c * 0.0773993808, vec3(lessThanEqual(c, vec3(0.04045))));
+      }`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "vec4 diffuseColor = vec4( diffuse, alpha );",
+      `float wt = clamp((vWireMetric - uNear) / max(uFar - uNear, 0.0001), 0.0, 1.0);
+      vec3 gradSrgb = mix(uNearColor, uFarColor, wt);
+      vec4 diffuseColor = vec4(wfSRGBToLinear(gradSrgb), alpha);`
+    );
+  };
+}
+function disposeWireframeLineSegments(root) {
+  root.traverse((obj) => {
+    if (obj.isLineSegments || obj.isLineSegments2) {
+      obj.geometry?.dispose();
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const material of materials) material?.dispose();
+    }
+  });
+}
+
+const MODEL_DIR = "./model/";
+
+const AMBIENT_LIGHT_COEF = 1.0; // d2js版と見た目が同じになるように係数をかける
+// DirectionalLight
+const DIRECTIONAL_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+// PointLight
+const POINT_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+const POINT_LIGHT_DISTANCE = 25.0; // 光の最大到達距離（影のfarにも反映される）
+const POINT_LIGHT_DECAY = 0.01;
+const POINT_LIGHT_SHADOW_RADIUS = 4.0; // 影のぼかし（1=既定、大きいほどソフト、解像度低下に注意）
+// SpotLight
+const SPOT_LIGHT_COEF = 5.0; // d2js版と見た目が同じになるように係数をかける
+const SPOT_LIGHT_DISTANCE = 25.0;
+const SPOT_LIGHT_DECAY = 0.01;
+const SPOT_LIGHT_ANGLE = Math.PI / 12.0; // Three.jsでは半開角。つまり15deg×2となり、影カメラFOV30deg
+const SPOT_LIGHT_PENUMBRA = 0.2; // 光円の境界ぼかし（0=くっきり、1=最大限ぼかす）
+const SPOT_LIGHT_SHADOW_RADIUS = 1.0; // 影のぼかし（PCFSoftShadowMap、1=既定、大きいほどソフト）
+
+let image_loaded = false;
+
+const canvas3d = document.getElementById("hoge_canvas");
+const canvas2d = document.getElementById("fuga_canvas");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0000ff);
+
+const lookY = 2.5;
+const camera = new THREE.PerspectiveCamera(45.0, canvas3d.width / canvas3d.height, 0.1, 100.0);
+camera.position.set(0.0, 2.5, 5.0);
+camera.lookAt(0.0, lookY, 0.0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setSize(canvas3d.width, canvas3d.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+// Percentage-Closer Filtering（パーセンテージ・クローザー・フィルタリング）を使用。シャドウマップで「そのピクセルは影の中か」を判定するとき、1点だけではなく周辺の深度を複数サンプルし、影に入っている割合（パーセンテージ）で明暗を決める手法。
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 既定値：PCFShadowMap
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scenePivot = new THREE.Group();
+scenePivot.position.set(0.0, lookY, 0.0);
+scene.add(scenePivot);
+
+const worldPivot = new THREE.Vector3(0.0, lookY, 0.0);
+
+let lightX = -3.0;
+let lightY = 7.5;
+let lightZ = 3.5;
+const LIGHT_STEP = 0.1;
+
+let rotateX = 20.0;
+let rotateY = 20.0;
+
+let light;
+if (useDirectionalLight) {
+  light = new THREE.DirectionalLight(0xffffff, 1.0 * DIRECTIONAL_LIGHT_COEF); // d2js版と見た目が同じになるように係数をかける
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = 40.0;
+  light.shadow.camera.left = -10.0;
+  light.shadow.camera.right = 10.0;
+  light.shadow.camera.top = 10.0;
+  light.shadow.camera.bottom = -10.0;
+  light.position.set(lightX, lightY, lightZ);
+  light.target.position.set(0.0, lookY, 0.0); // 初期方向は仮（後で毎フレームtarget方向に合わせる）
+  scene.add(light);
+  scene.add(light.target);
+}
+if (usePointLight) {
+  light = new THREE.PointLight(0xffffff, 1.0 * POINT_LIGHT_COEF, POINT_LIGHT_DISTANCE, POINT_LIGHT_DECAY);
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = POINT_LIGHT_DISTANCE;
+  light.shadow.bias = -0.0001;
+  light.shadow.normalBias = 0.02;
+  light.shadow.radius = POINT_LIGHT_SHADOW_RADIUS;
+  light.position.set(lightX, lightY, lightZ);
+  scene.add(light);
+}
+if (useSpotLight) {
+  light = new THREE.SpotLight(0xffffff, 1.0 * SPOT_LIGHT_COEF, SPOT_LIGHT_DISTANCE, SPOT_LIGHT_ANGLE, SPOT_LIGHT_PENUMBRA, SPOT_LIGHT_DECAY);
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = SPOT_LIGHT_DISTANCE;
+  light.shadow.bias = -0.0001;
+  light.shadow.normalBias = 0.02;
+  light.shadow.radius = SPOT_LIGHT_SHADOW_RADIUS;
+  light.position.set(lightX, lightY, lightZ);
+  light.target.position.set(0.0, lookY, 0.0); // 初期方向は仮（後で毎フレームtarget方向に合わせる）
+  scene.add(light);
+  scene.add(light.target);
+}
+scene.add(new THREE.AmbientLight(0xffffff, 0.5 * AMBIENT_LIGHT_COEF)); // d2js版と見た目が同じになるように係数をかける
+
+const keys = new Set();
+window.addEventListener("keydown", (e) => {
+  keys.add(e.code);
+  if (e.code === "Enter") {
+    dispMode++;
+    applyDispMode().catch(console.error);
+  }
+});
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+
+const specs = [
+  { name: "witch", scale: 0.015, pos: [0.0, 0.05, 0.0], diffuse: 0.8 },
+  { name: "cat", scale: 0.005, pos: [-1.5, 0.4, 0.5] },
+  { name: "swan", scale: 0.005, pos: [2.0, 2.0, 0.5], kaBlend: 0.35 },
+  { name: "ground", scale: 0.1, pos: [0.0, 0.0, 0.0], ground: true },
+];
+
+async function prepareModelRootFromSpec(s) {
+  const root = await loadObjMtl(MODEL_DIR, s.name);
+  convertMaterialsToLambert(root);
+  if (s.name === "witch") {
+    applyDiffuseMapsFromUrls(root, [
+      { materialName: "kao", url: "texture/kao.jpg" },
+      { materialName: "body", url: "texture/body.jpg" },
+      { materialName: "fire", url: "texture/fire.jpg" },
+    ]);
+  }
+  if (s.diffuse !== undefined) applyDiffuse(root, new THREE.Color(s.diffuse, s.diffuse, s.diffuse));
+  if (s.kaBlend !== undefined) applyKaBlendToDiffuse(root, s.kaBlend);
+  applySmoothShading(root);
+  root.scale.setScalar(s.scale);
+  return root;
+}
+
+function rotateScenePivot() {
+  scenePivot.rotation.set(
+    THREE.MathUtils.degToRad(rotateX),
+    THREE.MathUtils.degToRad(rotateY),
+    0.0,
+    "XYZ"
+  );
+}
+
+function attachModelRootToScene(root, s) {
+  root.position.set(s.pos[0], s.pos[1] - lookY, s.pos[2]);
+  const castShadow = !s.ground;
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.castShadow = castShadow;
+      obj.receiveShadow = true;
+    }
+  });
+
+  // シーンが回転していない状態に対してrootを登録した後、回転を戻す
+  scenePivot.rotation.set(0.0, 0.0, 0.0);
+  scenePivot.updateMatrixWorld(true);
+  scenePivot.add(root);
+  rotateScenePivot();
+
+  // シーンへ登録した後、親pivotの回転を反映したワールド行列にそろえる
+  root.parent?.updateMatrixWorld(true);
+  root.updateMatrixWorld(true);
+
+  if (useWireframe) {
+    if (useWireframeMaterial) {
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          if (!m || !m.isMaterial) continue;
+          m.wireframe = true;
+          m.color.setRGB(WIREFRAME_GRAY, WIREFRAME_GRAY, WIREFRAME_GRAY);
+          if (m.emissive) m.emissive.setRGB(0.0, 0.0, 0.0);
+          m.map = null;
+          m.normalMap = null;
+          m.aoMap = null;
+        }
+      });
+    } else {
+      const wireframeMeshes = [];
+      root.traverse((o) => {
+        if (!o.isMesh || o.isLineSegments2) return;
+        wireframeMeshes.push(o);
+      });
+      for (const o of wireframeMeshes) {
+        const wireGeom = new THREE.WireframeGeometry(o.geometry);
+        let lines;
+        if (useWireframeBasic) {
+          const lineMat = new THREE.LineBasicMaterial({
+            color: WIREFRAME_NEAR_COLOR.clone(),
+            vertexColors: useWireframeGradient,
+            fog: false,
+          });
+          lines = new THREE.LineSegments(wireGeom, lineMat);
+          if (useWireframeGradient) wireframeBasicLines.push(lines);
+        } else {
+          const lineGeom = new LineSegmentsGeometry().fromWireframeGeometry(wireGeom);
+          wireGeom.dispose();
+          const lineMat = new LineMaterial({
+            color: WIREFRAME_NEAR_COLOR.clone(),
+            linewidth: WIREFRAME_LINE_WIDTH,
+            worldUnits: false,
+            fog: false,
+          });
+          if (useWireframeGradient) applyWireframeGradientToLineMaterial(lineMat, useDistance);
+          const pr = renderer.getPixelRatio();
+          lineMat.resolution.set(canvas3d.width * pr, canvas3d.height * pr);
+          lines = new LineSegments2(lineGeom, lineMat);
+          lineMat.alphaToCoverage = true;
+        }
+        lines.position.copy(o.position);
+        lines.quaternion.copy(o.quaternion);
+        lines.scale.copy(o.scale);
+        lines.castShadow = o.castShadow;
+        lines.receiveShadow = o.receiveShadow;
+        (o.parent ?? root).add(lines);
+        o.visible = false;
+      }
+    }
+  }
+  return root;
+}
+
+async function applyDispMode() {
+  let visible;
+  const m = dispMode % 4;
+  if (m === 0) visible = new Set(CHARACTER_NAMES);
+  else if (m === 1) visible = new Set(["witch"]);
+  else if (m === 2) visible = new Set(["cat"]);
+  else visible = new Set(["swan"]);
+
+  for (const name of CHARACTER_NAMES) {
+    if (!visible.has(name)) {
+      const root = modelRoots[name];
+      if (root) {
+        if (useWireframe) {
+          disposeWireframeLineSegments(root);
+
+          // wireframeBasicLinesから該当オブジェクトを除去
+          if (useWireframeBasic && useWireframeGradient) {
+            root.traverse((o) => {
+              const idx = wireframeBasicLines.indexOf(o);
+              if (idx >= 0) wireframeBasicLines.splice(idx, 1);
+            });
+          }
+        }
+
+        disposeObjMtlRoot(root);
+        modelRoots[name] = null;
+      }
+    }
+  }
+  for (const name of CHARACTER_NAMES) {
+    if (!visible.has(name) || modelRoots[name]) continue;
+    const spec = specs.find((s) => s.name === name);
+    if (useTemplate) {
+      const template = modelTemplates[spec.name];
+      modelRoots[name] = template.clone(true);
+      modelRoots[name].name = `${spec.name}_instance`;
+      modelRoots[name].visible = true;
+    } else {
+      modelRoots[name] = await prepareModelRootFromSpec(spec);
+    }
+    attachModelRootToScene(modelRoots[name], spec);
+  }
+}
+
+(async () => {
+  try {
+    const groundSpec = specs.find((s) => s.ground);
+    const groundRoot = await prepareModelRootFromSpec(groundSpec);
+    attachModelRootToScene(groundRoot, groundSpec);
+    if (useTemplate) {
+      for (const name of CHARACTER_NAMES) {
+        const spec = specs.find((s) => s.name === name);
+        const template = await prepareModelRootFromSpec(spec);
+        template.visible = false;
+        modelTemplates[name] = template;
+      }
+    }
+    await applyDispMode();
+    image_loaded = true;
+  } catch (e) {
+    console.error(e);
+  }
+})();
+
+mySetAnimationLoop(renderer, () => (image_loaded ? 1000 / 30/*フレーム*/ : 100), () => {
+  if (keys.has("ArrowUp")) lightY += LIGHT_STEP;
+  if (keys.has("ArrowDown")) lightY -= LIGHT_STEP;
+  if (keys.has("ArrowLeft")) lightX -= LIGHT_STEP;
+  if (keys.has("ArrowRight")) lightX += LIGHT_STEP;
+  if (keys.has("KeyZ")) lightZ += LIGHT_STEP;
+  if (keys.has("KeyX")) lightZ -= LIGHT_STEP;
+
+  rotateScenePivot();
+
+  const pivotRot = new THREE.Matrix4().makeRotationFromEuler(scenePivot.rotation);
+  const transLight = new THREE.Vector3(lightX, lightY, lightZ) // transLight = R * (light - pivot) + pivot（RはscenePivotと同一）
+    .sub(worldPivot)
+    .applyMatrix4(pivotRot)
+    .add(worldPivot);
+  light.position.copy(transLight);
+  if (useDirectionalLight || useSpotLight) {
+    light.target.position.set(0.0, lookY, 0.0);
+    light.target.updateMatrixWorld();
+  }
+
+  camera.lookAt(0.0, lookY, 0.0);
+  if (useWireframe && useWireframeBasic && useWireframeGradient) {
+    for (const lines of wireframeBasicLines) updateBasicWireframeColors(lines, camera);
+  }
+  renderer.render(scene, camera);
+
+  // 2Dグラフィック画面の描画
+  const context = canvas2d.getContext("2d");
+  context.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  context.font = "24px 'MS Gothic', sans-serif";
+  context.fillStyle = "rgb(255, 0, 255)";
+  context.fillText("rotateX " + rotateX.toFixed(1), 0, 24);
+  context.fillText("rotateY " + rotateY.toFixed(1), 0, 48);
+  context.fillText("lightX " + lightX.toFixed(1), 0, 72);
+  context.fillText("lightY " + lightY.toFixed(1), 0, 96);
+  context.fillText("lightZ " + lightZ.toFixed(1), 0, 120);
+});
+
+let mouseDown = false;
+let mouseX = 0;
+let mouseY = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  mouseDown = true;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+window.addEventListener("pointerup", () => {
+  mouseDown = false;
+});
+window.addEventListener("pointermove", (e) => {
+  if (!mouseDown) return;
+  rotateX += (e.clientY - mouseY) / 2.0;
+  rotateY += (e.clientX - mouseX) / 2.0;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+</script>
+</head>
+<body>
+<div align="center">
+  <div style="position:relative">
+    <canvas id="hoge_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0)" width="640" height="480"></canvas>
+    <canvas id="fuga_canvas" style="position:absolute; left:50%; transform:translate(-50%, 0); pointer-events:none" width="640" height="480"></canvas>
+  </div>
+</div>
+</body>
+</html>
