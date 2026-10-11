@@ -19,6 +19,7 @@ import { applyAmbient, applyDiffuse, applySmoothShading, convertMaterialsToLambe
 import { _DIV, _MOD, Baku, checkHit, ENEMY01_SPEED, ENEMY02_SPEED, ENEMY_SHOT_RADIUS, ENEMY_SHOT_SPEED, ENEMY_TYPE_01, ENEMY_TYPE_02, ENEMY_Y_MIN, Enemy01, Enemy02, EnemyShot, GROUND_SIZE, Jiki, JikiJet, JikiShots, JIKI_SPEED, modelBoundingRadius, MyRandom, WAIT_1 } from "./gameCommon.js";
 import { mySetAnimationLoop } from "./common.js";
 import { ThreeGamepad } from "./threeGamepad.js";
+import { createEnemyHudObjects, disposeEnemyHudObjects, updateEnemyHud } from "./enemyHud3D.js";
 
 function detectRuntime() {
   // NW.js上で動作しているかの判定
@@ -37,6 +38,7 @@ function detectRuntime() {
 const drawHitFlag = false;
 const useGamepad = false;
 const useSound = false;
+const useEnemyHud3D = true;
 
 let gamepad;
 let padInfo;
@@ -254,8 +256,13 @@ light.shadow.normalBias = 0.03;
 scene.add(amb, light);
 scene.add(light.target);
 
+let screenshotFlag = false;
+
 const keys = {};
-window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+window.addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (e.code === "KeyS") screenshotFlag = true;
+});
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
 
 let jiki = new Jiki(1.0);
@@ -353,7 +360,11 @@ function addEnemy01(flag) {
   const enemy = new Enemy01(x, y, z, vx2, vy, vz2, enemyRadius01 * 2.0, flag, jiki);
   const model = enemy01Template.clone(true);
   scene.add(model);
-  enemies.push({ kind: ENEMY_TYPE_01, enemy, model });
+  if (useEnemyHud3D) {
+    enemies.push({ kind: ENEMY_TYPE_01, enemy, model, hud: createEnemyHudObjects(scene) });
+  } else {
+    enemies.push({ kind: ENEMY_TYPE_01, enemy, model });
+  }
 }
 
 function addEnemy02(flag) {
@@ -382,7 +393,11 @@ function addEnemy02(flag) {
   const enemy = new Enemy02(x, y, z, vx2, vy, vz2, enemyRadius02 * 2.0, jiki, addEnemyShot);
   const model = enemy02Template.clone(true);
   scene.add(model);
-  enemies.push({ kind: ENEMY_TYPE_02, enemy, model });
+  if (useEnemyHud3D) {
+    enemies.push({ kind: ENEMY_TYPE_02, enemy, model, hud: createEnemyHudObjects(scene) });
+  } else {
+    enemies.push({ kind: ENEMY_TYPE_02, enemy, model });
+  }
 }
 
 function setGroundTiles() {
@@ -615,13 +630,17 @@ if (detectRuntime() === "browser") {
     for (let i = jikiShots.size() - 1; i >= 0; i--) {
       const s = jikiShots.get(i);
       for (let j = enemies.length - 1; j >= 0; j--) {
-        const { enemy: en, model } = enemies[j];
+        const entry = enemies[j];
+        const { enemy: en, model } = entry;
         if (
           checkHit(s.x(), s.y(), s.z(), s.radius(), en.x(), en.y(), en.z(), en.radius())
         ) {
           if (en.damage()) {
             const t = en.type();
             addBaku(en.x(), en.y(), en.z());
+            if (useEnemyHud3D) {
+              disposeEnemyHudObjects(scene, entry.hud);
+            }
             scene.remove(model);
             enemies.splice(j, 1);
             {
@@ -666,6 +685,9 @@ if (detectRuntime() === "browser") {
     const entry = enemies[i];
     const enemy = entry.enemy;
     if (!enemy.update()) {
+      if (useEnemyHud3D) {
+        disposeEnemyHudObjects(scene, entry.hud);
+      }
       scene.remove(entry.model);
       const t = enemy.type();
       enemies.splice(i, 1);
@@ -720,6 +742,11 @@ if (detectRuntime() === "browser") {
   );
   light.target.position.set(look_x, look_y, look_z);
 
+  if (useEnemyHud3D) {
+    for (let i = 0; i < enemies.length; i++) {
+      updateEnemyHud({ hud: enemies[i].hud, enemy: enemies[i].enemy, enemyHudProj, camera, jiki, canvas3d });
+    }
+  }
   renderer.render(scene, camera);
 
   // 2Dグラフィック画面の描画
@@ -754,35 +781,57 @@ if (detectRuntime() === "browser") {
   const str = String(score);
   context.fillText(str, canvas2d.width / 3.0 - context.measureText(str).width, 24);
 
-  context.strokeStyle = "rgb(0, 255, 255)";
-  context.fillStyle = "rgb(0, 255, 255)";
-  context.lineWidth = 1.0;
-  context.font = "8px 'MS Gothic', sans-serif";
-  context.textBaseline = "bottom";
-  for (let i = 0; i < enemies.length; i++) {
-    const tmp = enemies[i].enemy;
-    enemyHudProj.set(tmp.x(), tmp.y(), tmp.z());
-    enemyHudProj.project(camera);
-    if (enemyHudProj.z < -1.0 || enemyHudProj.z > 1.0) continue;
-    const px = (enemyHudProj.x * 0.5 + 0.5) * canvas2d.width;
-    const py = (-enemyHudProj.y * 0.5 + 0.5) * canvas2d.height;
-    const dx = tmp.x() - jiki.x();
-    const dy = tmp.y() - jiki.y();
-    const dz = tmp.z() - jiki.z();
-    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    let seg = 50.0 - distance;
-    if (seg < 15.0) seg = 15.0;
-    const tx = px + seg + 20.0;
-    const ty = py - seg;
-    context.beginPath();
-    context.moveTo(px, py);
-    context.lineTo(px + seg, ty);
-    context.lineTo(tx, ty);
-    context.stroke();
-    const label = String((distance * 100.0) | 0);
-    const whole = label.slice(0, -2) || "0";
-    const frac = label.slice(-2).padStart(2, "0");
-    context.fillText(`${whole}.${frac}`, px + seg, ty);
+  if (!useEnemyHud3D) {
+    context.strokeStyle = "rgb(0, 255, 255)";
+    context.fillStyle = "rgb(0, 255, 255)";
+    context.lineWidth = 1.0;
+    context.font = "8px 'MS Gothic', sans-serif";
+    context.textBaseline = "bottom";
+    for (let i = 0; i < enemies.length; i++) {
+      const tmp = enemies[i].enemy;
+      enemyHudProj.set(tmp.x(), tmp.y(), tmp.z());
+      enemyHudProj.project(camera);
+      if (enemyHudProj.z < -1.0 || enemyHudProj.z > 1.0) continue;
+      const px = (enemyHudProj.x * 0.5 + 0.5) * canvas2d.width;
+      const py = (-enemyHudProj.y * 0.5 + 0.5) * canvas2d.height;
+      const dx = tmp.x() - jiki.x();
+      const dy = tmp.y() - jiki.y();
+      const dz = tmp.z() - jiki.z();
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      let seg = 50.0 - distance;
+      if (seg < 15.0) seg = 15.0;
+      const tx = px + seg + 20.0;
+      const ty = py - seg;
+      context.beginPath();
+      context.moveTo(px, py);
+      context.lineTo(px + seg, ty);
+      context.lineTo(tx, ty);
+      context.stroke();
+      const label = String((distance * 100.0) | 0);
+      const whole = label.slice(0, -2) || "0";
+      const frac = label.slice(-2).padStart(2, "0");
+      context.fillText(`${whole}.${frac}`, px + seg, ty);
+    }
+  }
+
+  if (screenshotFlag) {
+    screenshotFlag = false;
+    const w = canvas3d.width;
+    const h = canvas3d.height;
+    const composite = document.createElement("canvas");
+    composite.width = w;
+    composite.height = h;
+    const cctx = composite.getContext("2d");
+    cctx.drawImage(renderer.domElement, 0, 0);
+    cctx.drawImage(canvas2d, 0, 0, canvas2d.width, canvas2d.height, 0, 0, w, h);
+    const dataUrl = composite.toDataURL("image/png");
+    let a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = "screenshot.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    a = null;
   }
 });
 </script>
