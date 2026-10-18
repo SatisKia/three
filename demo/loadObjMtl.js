@@ -186,6 +186,7 @@ export function applyKaBlendToDiffuse(root, weight) {
 }
 
 // emissiveを拡散色colorと同じにし、emissiveIntensityをambientにして、Lambert向けに環境光の底上げを発光で近似する
+// * demo未使用 *
 export function applyAmbient(root, ambient) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -200,6 +201,7 @@ export function applyAmbient(root, ambient) {
 }
 
 // colorを黒にして拡散項（頂点色・拡散テクスチャ）を消し、emissiveだけ設定する
+// * demo未使用 *
 export function applyEmissive(root, color) {
   const _color = color && color.isColor === true ? color : new THREE.Color(color);
   root.traverse((obj) => {
@@ -216,6 +218,7 @@ export function applyEmissive(root, color) {
 }
 
 // 面ごとの法線によるフラットシェーディング。Three.jsでは、頂点法線属性はライティングに使われないため頂点法線が無い場合に法線を求める必要はない。
+// * demo未使用 *
 export function applyFlatShading(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -230,6 +233,7 @@ export function applyFlatShading(root) {
 }
 
 // OBJの頂点法線を維持したGouraudシェーディング。ストリップ内（法線が共有される面）は補間され、法線が分かれた境界だけエッジが立つ。
+// * demo未使用 *
 export function applyGouraudShading(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;

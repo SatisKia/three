@@ -65,6 +65,7 @@ export function convertMaterialsToLambert(root) {
 }
 
 // ライトを使わずmap×colorのみ（テクスチャの見た目をそのまま近づける）
+// * game未使用 *
 export function convertMaterialsToBasic(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -83,6 +84,7 @@ export function convertMaterialsToBasic(root) {
 }
 
 // MTLマテリアル名に対応する拡散テクスチャを差し替える（convertMaterialsToLambert/convertMaterialsToBasicより後に実行）
+// * game未使用 *
 export function applyDiffuseMapsFromUrls(root, materialUrlByName) {
   const urlMap = {};
   for (const entry of materialUrlByName) {
@@ -106,6 +108,7 @@ export function applyDiffuseMapsFromUrls(root, materialUrlByName) {
 }
 
 // MeshPhongMaterialのみを走査し、specularとshininessを設定する。specularはTHREE.Color、16進数（0xRRGGBB）、CSS文字列（"#RRGGBB"）などTHREE.Colorコンストラクタが受け付ける値
+// * game未使用 *
 export function applyPhongSpecular(root, specular, shininess) {
   const _specular = specular && specular.isColor === true ? specular : new THREE.Color(specular);
   root.traverse((obj) => {
@@ -136,6 +139,7 @@ export function applyDiffuse(root, color) {
 }
 
 // MTLのKaを拡散色へブレンド（ThreeのMTLLoaderはKaを捨てるためloadObjMtlがuserData.mtlKaRgbを付与）
+// * game未使用 *
 export function applyKaBlendToDiffuse(root, weight) {
   if (weight <= 0) return;
   const w = Math.min(1, weight);
@@ -170,6 +174,7 @@ export function applyAmbient(root, ambient) {
 }
 
 // colorを黒にして拡散項（頂点色・拡散テクスチャ）を消し、emissiveだけ設定する
+// * game未使用 *
 export function applyEmissive(root, color) {
   const _color = color && color.isColor === true ? color : new THREE.Color(color);
   root.traverse((obj) => {
@@ -186,6 +191,7 @@ export function applyEmissive(root, color) {
 }
 
 // 面ごとの法線によるフラットシェーディング。Three.jsでは、頂点法線属性はライティングに使われないため頂点法線が無い場合に法線を求める必要はない。
+// * game未使用 *
 export function applyFlatShading(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -200,6 +206,7 @@ export function applyFlatShading(root) {
 }
 
 // OBJの頂点法線を維持したGouraudシェーディング。ストリップ内（法線が共有される面）は補間され、法線が分かれた境界だけエッジが立つ。
+// * game未使用 *
 export function applyGouraudShading(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
