@@ -76,6 +76,24 @@ export function disposeObjMtlRoot(root) {
   });
 }
 
+// ライトを使わずmap×colorのみ（テクスチャの見た目をそのまま近づける）
+export function convertMaterialsToBasic(root) {
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const next = materials.map((material) => {
+      if (!material) return material;
+      if (material.isMeshBasicMaterial) return material;
+      const basic = new THREE.MeshBasicMaterial();
+      basic.copy(material);
+      basic.needsUpdate = true;
+      material.dispose();
+      return basic;
+    });
+    obj.material = Array.isArray(obj.material) ? next : next[0];
+  });
+}
+
 // MTLLoaderが付与するMeshPhong等をLambertにし、d2js版に近い拡散光モデルに寄せる
 export function convertMaterialsToLambert(root) {
   root.traverse((obj) => {
@@ -94,21 +112,17 @@ export function convertMaterialsToLambert(root) {
   });
 }
 
-// ライトを使わずmap×colorのみ（テクスチャの見た目をそのまま近づける）
-export function convertMaterialsToBasic(root) {
+// メッシュのmaterial.color（拡散色）を一括で置き換える。colorはTHREE.Color、16進数（0xRRGGBB）、CSS文字列（"#RRGGBB"）などTHREE.Colorコンストラクタが受け付ける値
+export function applyDiffuse(root, color) {
+  const _color = color && color.isColor === true ? color : new THREE.Color(color);
   root.traverse((obj) => {
     if (!obj.isMesh) return;
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    const next = materials.map((material) => {
-      if (!material) return material;
-      if (material.isMeshBasicMaterial) return material;
-      const basic = new THREE.MeshBasicMaterial();
-      basic.copy(material);
-      basic.needsUpdate = true;
-      material.dispose();
-      return basic;
-    });
-    obj.material = Array.isArray(obj.material) ? next : next[0];
+    for (const material of materials) {
+      if (material && material.color) {
+        material.color.copy(_color);
+      }
+    }
   });
 }
 
@@ -151,20 +165,6 @@ export function applyPhongSpecular(root, specular, shininess) {
   });
 }
 
-// メッシュのmaterial.color（拡散色）を一括で置き換える。colorはTHREE.Color、16進数（0xRRGGBB）、CSS文字列（"#RRGGBB"）などTHREE.Colorコンストラクタが受け付ける値
-export function applyDiffuse(root, color) {
-  const _color = color && color.isColor === true ? color : new THREE.Color(color);
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (material && material.color) {
-        material.color.copy(_color);
-      }
-    }
-  });
-}
-
 // MTLのKaを拡散色へブレンド（ThreeのMTLLoaderはKaを捨てるためloadObjMtlがuserData.mtlKaRgbを付与）
 export function applyKaBlendToDiffuse(root, weight) {
   if (weight <= 0) return;
@@ -181,72 +181,6 @@ export function applyKaBlendToDiffuse(root, weight) {
       c.r = c.r * ow + ka[0] * w;
       c.g = c.g * ow + ka[1] * w;
       c.b = c.b * ow + ka[2] * w;
-    }
-  });
-}
-
-// emissiveを拡散色colorと同じにし、emissiveIntensityをambientにして、Lambert向けに環境光の底上げを発光で近似する
-// * demo未使用 *
-export function applyAmbient(root, ambient) {
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (!material || !material.emissive || typeof material.emissive.copy !== "function") continue;
-      material.emissive.copy(material.color); // 拡散色と同じ色で環境光近似
-      material.emissiveIntensity = ambient; // LambertではemissiveIntensityで近似
-      material.needsUpdate = true;
-    }
-  });
-}
-
-// colorを黒にして拡散項（頂点色・拡散テクスチャ）を消し、emissiveだけ設定する
-// * demo未使用 *
-export function applyEmissive(root, color) {
-  const _color = color && color.isColor === true ? color : new THREE.Color(color);
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (!material || !material.emissive || typeof material.emissive.copy !== "function") continue;
-      if (material.color) material.color.set(0, 0, 0);
-      material.emissive.copy(_color);
-      material.emissiveIntensity = 1;
-      material.needsUpdate = true;
-    }
-  });
-}
-
-// 面ごとの法線によるフラットシェーディング。Three.jsでは、頂点法線属性はライティングに使われないため頂点法線が無い場合に法線を求める必要はない。
-// * demo未使用 *
-export function applyFlatShading(root) {
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (material && "flatShading" in material) {
-        material.flatShading = true;
-        material.needsUpdate = true;
-      }
-    }
-  });
-}
-
-// OBJの頂点法線を維持したGouraudシェーディング。ストリップ内（法線が共有される面）は補間され、法線が分かれた境界だけエッジが立つ。
-// * demo未使用 *
-export function applyGouraudShading(root) {
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const geometry = obj.geometry;
-    if (geometry && geometry.isBufferGeometry && geometry.getAttribute("position") && !geometry.getAttribute("normal")) {
-      geometry.computeVertexNormals(); // 面法線から頂点法線を求めて平均化し、面と面の境が滑らかに見えやすくする
-    }
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (material && "flatShading" in material) {
-        material.flatShading = false; // 頂点法線で補間されるスムースシェーディングにする
-        material.needsUpdate = true; // シェーダー切り替えを確実に反映させる
-      }
     }
   });
 }

@@ -64,66 +64,6 @@ export function convertMaterialsToLambert(root) {
   });
 }
 
-// ライトを使わずmap×colorのみ（テクスチャの見た目をそのまま近づける）
-// * game未使用 *
-export function convertMaterialsToBasic(root) {
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    const next = materials.map((material) => {
-      if (!material) return material;
-      if (material.isMeshBasicMaterial) return material;
-      const basic = new THREE.MeshBasicMaterial();
-      basic.copy(material);
-      basic.needsUpdate = true;
-      material.dispose();
-      return basic;
-    });
-    obj.material = Array.isArray(obj.material) ? next : next[0];
-  });
-}
-
-// MTLマテリアル名に対応する拡散テクスチャを差し替える（convertMaterialsToLambert/convertMaterialsToBasicより後に実行）
-// * game未使用 *
-export function applyDiffuseMapsFromUrls(root, materialUrlByName) {
-  const urlMap = {};
-  for (const entry of materialUrlByName) {
-    urlMap[entry.materialName] = entry.url;
-  }
-  if (!urlMap) return;
-  const loader = new THREE.TextureLoader();
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (!material || !material.name) continue;
-      const url = urlMap[material.name];
-      if (url == null || typeof url !== "string") continue;
-      if (material.map) material.map.dispose();
-      material.map = loader.load(url);
-      material.map.colorSpace = THREE.SRGBColorSpace;
-      material.needsUpdate = true;
-    }
-  });
-}
-
-// MeshPhongMaterialのみを走査し、specularとshininessを設定する。specularはTHREE.Color、16進数（0xRRGGBB）、CSS文字列（"#RRGGBB"）などTHREE.Colorコンストラクタが受け付ける値
-// * game未使用 *
-export function applyPhongSpecular(root, specular, shininess) {
-  const _specular = specular && specular.isColor === true ? specular : new THREE.Color(specular);
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (material && material.isMeshPhongMaterial) {
-        material.specular.copy(_specular);
-        material.shininess = shininess;
-        material.needsUpdate = true;
-      }
-    }
-  });
-}
-
 // メッシュのmaterial.color（拡散色）を一括で置き換える。colorはTHREE.Color、16進数（0xRRGGBB）、CSS文字列（"#RRGGBB"）などTHREE.Colorコンストラクタが受け付ける値
 export function applyDiffuse(root, color) {
   const _color = color && color.isColor === true ? color : new THREE.Color(color);
@@ -134,27 +74,6 @@ export function applyDiffuse(root, color) {
       if (material && material.color) {
         material.color.copy(_color);
       }
-    }
-  });
-}
-
-// MTLのKaを拡散色へブレンド（ThreeのMTLLoaderはKaを捨てるためloadObjMtlがuserData.mtlKaRgbを付与）
-// * game未使用 *
-export function applyKaBlendToDiffuse(root, weight) {
-  if (weight <= 0) return;
-  const w = Math.min(1, weight);
-  const ow = 1 - w;
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (!material || !material.color) continue;
-      const ka = material.userData?.mtlKaRgb;
-      if (!ka || ka.length < 3) continue;
-      const c = material.color;
-      c.r = c.r * ow + ka[0] * w;
-      c.g = c.g * ow + ka[1] * w;
-      c.b = c.b * ow + ka[2] * w;
     }
   });
 }
@@ -174,7 +93,6 @@ export function applyAmbient(root, ambient) {
 }
 
 // colorを黒にして拡散項（頂点色・拡散テクスチャ）を消し、emissiveだけ設定する
-// * game未使用 *
 export function applyEmissive(root, color) {
   const _color = color && color.isColor === true ? color : new THREE.Color(color);
   root.traverse((obj) => {
@@ -190,23 +108,7 @@ export function applyEmissive(root, color) {
   });
 }
 
-// 面ごとの法線によるフラットシェーディング。Three.jsでは、頂点法線属性はライティングに使われないため頂点法線が無い場合に法線を求める必要はない。
-// * game未使用 *
-export function applyFlatShading(root) {
-  root.traverse((obj) => {
-    if (!obj.isMesh) return;
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const material of materials) {
-      if (material && "flatShading" in material) {
-        material.flatShading = true;
-        material.needsUpdate = true;
-      }
-    }
-  });
-}
-
 // OBJの頂点法線を維持したGouraudシェーディング。ストリップ内（法線が共有される面）は補間され、法線が分かれた境界だけエッジが立つ。
-// * game未使用 *
 export function applyGouraudShading(root) {
   root.traverse((obj) => {
     if (!obj.isMesh) return;
