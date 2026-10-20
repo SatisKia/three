@@ -185,6 +185,21 @@ export function applyKaBlendToDiffuse(root, weight) {
   });
 }
 
+// 面ごとの法線によるフラットシェーディング。
+// Three.jsでは、頂点法線属性はライティングに使われないため頂点法線が無い場合に法線を求める必要はない。
+export function applyFlatShading(root) {
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const material of materials) {
+      if (material && "flatShading" in material) {
+        material.flatShading = true;
+        material.needsUpdate = true;
+      }
+    }
+  });
+}
+
 // 頂点法線を再計算し、マテリアルをスムースシェーディング（flatShading = false）にする
 export function applySmoothShading(root) {
   root.traverse((obj) => {

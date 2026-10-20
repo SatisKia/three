@@ -14,7 +14,7 @@
 </script>
 <script type="module">
 import * as THREE from "three";
-import { applyDiffuse, applyPhongSpecular, applySmoothShading, loadObjMtl } from "./loadObjMtl.js";
+import { applyDiffuse, applyFlatShading, applyPhongSpecular, applySmoothShading, loadObjMtl } from "./loadObjMtl.js";
 import { mySetAnimationLoop } from "./common.js";
 
 const MODEL_DIR = "./model/";
@@ -49,6 +49,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
     applyPhongSpecular(model, new THREE.Color(0.5, 0.5, 0.5), 50.0); // MeshPhongMaterialのspecular/shininessに相当
     if (useSmooth) {
       applySmoothShading(model);
+    } else {
+      applyFlatShading(model);
     }
     model.scale.setScalar(0.015);
     model.position.set(0.0, 0.0, -3.0);
