@@ -13,6 +13,24 @@ export async function loadObjMtl(basePath, modelName) {
   objLoader.setPath(path);
   const root = await objLoader.loadAsync(`${modelName}.obj`);
 
+  // OBJLoaderはvnが無くても面法線をnormalへ書き込むため、.objにvnが無ければnormal属性を外す。
+  const objText = await (await fetch(`${path}${modelName}.obj`)).text();
+  let hasVn = false;
+  for (const line of objText.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    if (t.split(/\s+/, 1)[0] === "vn") {
+      hasVn = true;
+      break;
+    }
+  }
+  if (!hasVn) {
+    root.traverse((obj) => {
+      if (!obj.isMesh || !obj.geometry) return;
+      obj.geometry.deleteAttribute("normal");
+    });
+  }
+
   // MTLLoaderはKaを無視するため、後段でKaを参照できるよう.mtlを軽くパースする。Kdはmaterial.colorに入る。
   const url = `${path}${modelName}.mtl`;
   const text = await (await fetch(url)).text();
